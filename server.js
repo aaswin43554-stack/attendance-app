@@ -1,59 +1,58 @@
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Only load .env locally (Render uses Environment Variables, no .env file)
+if (process.env.NODE_ENV !== "production") {
+  const dotenv = await import("dotenv");
+  dotenv.default.config();
+}
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const GOOGLE_SHEETS_API_URL = process.env.VITE_GOOGLE_SHEETS_API_URL;
+const PORT = process.env.PORT || 10000;
+
+// Support both names (recommended: set GOOGLE_SHEETS_API_URL in Render)
+const GOOGLE_SHEETS_API_URL =
+  process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
+
+// __dirname for ES Modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Serve static files from the Vite build output
-app.use(express.static(path.join(__dirname, "dist")));
 
 // Health check
 app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-/**
- * Proxy endpoint for Google Sheets API
- * POST /api/sheets
- * Forwards requests to Google Apps Script without CORS issues
- */
+// Proxy endpoint
 app.post("/api/sheets", async (req, res) => {
   try {
     if (!GOOGLE_SHEETS_API_URL) {
       return res.status(500).json({
-        error: "Google Sheets URL not configured",
+        error: "Google Sheets URL not configured (set GOOGLE_SHEETS_API_URL)",
       });
     }
 
-    // Forward the request to Google Apps Script
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
 
-    if (!response.ok) {
-      throw new Error(`Google Sheets API returned ${response.status}`);
-    }
+    const text = await response.text();
 
-    const data = await response.json();
-    res.json(data);
+    // Return JSON if possible, else return text
+    try {
+      return res.json(JSON.parse(text));
+    } catch {
+      return res.send(text);
+    }
   } catch (error) {
     console.error("Error proxying request to Google Sheets:", error);
     res.status(500).json({
@@ -62,14 +61,19 @@ app.post("/api/sheets", async (req, res) => {
   }
 });
 
-// Handle SPA routing - serve index.html for any unknown routes
-app.get("/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
+// ✅ Serve Vite build
+const distPath = path.join(__dirname, "dist");
+app.use(express.static(distPath));
+
+// ✅ SPA fallback (NO app.get("*") or "/*")
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api") || req.path === "/health") return next();
+  return res.sendFile(path.join(distPath, "index.html"));
 });
 
-
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(
+    `📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`
+  );
 });
