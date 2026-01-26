@@ -4,7 +4,7 @@ import fetch from "node-fetch";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Only load .env locally (Render uses Environment Variables, no .env file)
+// Load .env only in local development (Render uses Environment Variables)
 if (process.env.NODE_ENV !== "production") {
   const dotenv = await import("dotenv");
   dotenv.default.config();
@@ -13,7 +13,8 @@ if (process.env.NODE_ENV !== "production") {
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Support both names (recommended: set GOOGLE_SHEETS_API_URL in Render)
+// Use GOOGLE_SHEETS_API_URL in Render (recommended).
+// Keep VITE_GOOGLE_SHEETS_API_URL as fallback so existing code still works.
 const GOOGLE_SHEETS_API_URL =
   process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
 
@@ -30,12 +31,16 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Proxy endpoint
+/**
+ * Proxy endpoint for Google Sheets API
+ * POST /api/sheets
+ */
 app.post("/api/sheets", async (req, res) => {
   try {
     if (!GOOGLE_SHEETS_API_URL) {
       return res.status(500).json({
-        error: "Google Sheets URL not configured (set GOOGLE_SHEETS_API_URL)",
+        error:
+          "Google Sheets URL not configured. Set GOOGLE_SHEETS_API_URL in Render Environment Variables.",
       });
     }
 
@@ -47,7 +52,7 @@ app.post("/api/sheets", async (req, res) => {
 
     const text = await response.text();
 
-    // Return JSON if possible, else return text
+    // Try JSON first, else return text
     try {
       return res.json(JSON.parse(text));
     } catch {
@@ -61,16 +66,20 @@ app.post("/api/sheets", async (req, res) => {
   }
 });
 
-// ✅ Serve Vite build
+// ✅ Serve Vite build output (dist)
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
-// ✅ SPA fallback (NO app.get("*") or "/*")
+// ✅ SPA fallback WITHOUT app.get("*") or app.get("/*") (fixes your Render crash)
 app.use((req, res, next) => {
+  // Let API routes pass through
   if (req.path.startsWith("/api") || req.path === "/health") return next();
+
+  // Serve the React/Vite app for all other routes
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
+// Start server (Render requires listening on process.env.PORT)
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(
