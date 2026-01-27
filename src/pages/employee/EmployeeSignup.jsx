@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { getSession } from "../services/storage"; // adjust path to your project
+import { getSession } from "../../services/storage";
 import { logoutEmployee, logoutAdmin } from "../services/auth"; // if you don't have logoutAdmin, remove it
 
 export default function Header() {
