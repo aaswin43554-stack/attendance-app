@@ -24,9 +24,11 @@ function RequireAdmin({ children }) {
 }
 
 export default function App() {
+  const session = getSession(); // ✅ read session once for TopNav
+
   return (
     <>
-      <TopNav />
+      <TopNav session={session} /> {/* ✅ pass session */}
       <Routes>
         <Route path="/" element={<Navigate to="/employee/login" replace />} />
 
