@@ -12,18 +12,12 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
 
   const onLogin = async () => {
-    if (!email.trim() || !pass.trim()) {
-      setToast("Please enter email and password");
-      setTimeout(() => setToast(""), 2200);
-      return;
-    }
-
     try {
       setLoading(true);
-      await loginAdmin({ email: email.trim(), pass });
+      await loginAdmin({ email, pass });
       nav("/admin/dashboard");
     } catch (e) {
-      setToast(e?.message || "Login failed");
+      setToast(e.message || "Login failed");
       setTimeout(() => setToast(""), 2200);
     } finally {
       setLoading(false);
@@ -37,6 +31,7 @@ export default function AdminLogin() {
           title="Admin Login"
           subtitle="Sign in to view employee status and location logs."
         >
+          {/* Form helps prevent random browser autofill behavior */}
           <form
             onSubmit={(e) => {
               e.preventDefault();

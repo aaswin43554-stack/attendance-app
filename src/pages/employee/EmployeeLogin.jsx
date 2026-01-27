@@ -6,25 +6,18 @@ import { loginEmployee } from "../../services/auth";
 
 export default function EmployeeLogin() {
   const nav = useNavigate();
-
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onLogin = async () => {
-    if (!email || !pass) {
-      setToast("Please enter email and password");
-      setTimeout(() => setToast(""), 2200);
-      return;
-    }
-
     try {
       setLoading(true);
       await loginEmployee({ email, pass });
       nav("/employee/dashboard");
     } catch (e) {
-      setToast(e?.message || "Login failed");
+      setToast(e.message || "Login failed");
       setTimeout(() => setToast(""), 2200);
     } finally {
       setLoading(false);
@@ -84,7 +77,7 @@ export default function EmployeeLogin() {
 
           <div className="muted small">
             New employee?{" "}
-            <button className="linkBtn" type="button" onClick={() => nav("/employee/signup")}>
+            <button className="linkBtn" onClick={() => nav("/employee/signup")}>
               Create an account
             </button>
           </div>
