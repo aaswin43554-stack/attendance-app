@@ -21,14 +21,9 @@ export default function TopNav() {
         <div className="navLinks">
           {/* ✅ Show Employee/Admin only BEFORE login */}
           {!isLoggedIn && (
-            <>
-              <button className="chip" onClick={() => go("/employee/login")}>
-                Employee
-              </button>
-              <button className="chip" onClick={() => go("/admin/login")}>
-                Admin
-              </button>
-            </>
+            <button className="chip" onClick={() => go("/login")}>
+              Login
+            </button>
           )}
 
           {/* ✅ Removed: Reset + Get Started */}

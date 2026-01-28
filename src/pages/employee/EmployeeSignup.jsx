@@ -20,7 +20,7 @@ export default function EmployeeSignup() {
       setToast("Account created. Please login.");
       setTimeout(() => {
         setToast("");
-        nav("/employee/login");
+        nav("/login");
       }, 1200);
     } catch (e) {
       setToast(e.message || "Signup failed");
@@ -112,7 +112,7 @@ export default function EmployeeSignup() {
               <button
                 className="btn btnGhost"
                 type="button"
-                onClick={() => nav("/employee/login")}
+                onClick={() => nav("/login")}
                 disabled={loading}
               >
                 Back
