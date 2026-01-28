@@ -11,7 +11,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = Number(process.env.PORT) || 10000;
 
 // Use GOOGLE_SHEETS_API_URL in Render (recommended).
 // Keep VITE_GOOGLE_SHEETS_API_URL as fallback so existing code still works.
@@ -24,11 +24,11 @@ const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
-// Health check
+// Health check (Render-friendly)
 app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.status(200).json({ status: "ok" });
 });
 
 /**
@@ -47,35 +47,46 @@ app.post("/api/sheets", async (req, res) => {
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
+      body: JSON.stringify(req.body ?? {}),
     });
 
-    const text = await response.text();
+    const contentType = response.headers.get("content-type") || "";
+    const raw = await response.text();
 
-    // Try JSON first, else return text
+    // Pass through status code from upstream (often useful for debugging)
+    res.status(response.status);
+
+    // Return JSON if upstream is JSON OR if it parses cleanly
+    if (contentType.includes("application/json")) {
+      try {
+        return res.json(JSON.parse(raw));
+      } catch {
+        // upstream lied about JSON; fall back to text
+        return res.type("text/plain").send(raw);
+      }
+    }
+
+    // Try JSON parse anyway (some apps scripts return JSON without proper header)
     try {
-      return res.json(JSON.parse(text));
+      return res.json(JSON.parse(raw));
     } catch {
-      return res.send(text);
+      return res.type("text/plain").send(raw);
     }
   } catch (error) {
     console.error("Error proxying request to Google Sheets:", error);
-    res.status(500).json({
-      error: error.message || "Failed to reach Google Sheets",
+    return res.status(500).json({
+      error: error?.message || "Failed to reach Google Sheets",
     });
   }
 });
 
-// ✅ Serve Vite build output (dist)
+// Serve Vite build output (dist)
 const distPath = path.join(__dirname, "dist");
-app.use(express.static(distPath));
+app.use(express.static(distPath, { index: false }));
 
-// ✅ SPA fallback WITHOUT app.get("*") or app.get("/*") (fixes your Render crash)
+// SPA fallback (only for non-API routes)
 app.use((req, res, next) => {
-  // Let API routes pass through
   if (req.path.startsWith("/api") || req.path === "/health") return next();
-
-  // Serve the React/Vite app for all other routes
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
