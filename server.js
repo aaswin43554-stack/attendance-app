@@ -10,8 +10,13 @@ if (process.env.NODE_ENV !== "production") {
   dotenv.default.config();
 }
 
+process.on("unhandledRejection", (err) => console.error("unhandledRejection:", err));
+process.on("uncaughtException", (err) => console.error("uncaughtException:", err));
+
 const app = express();
-const PORT = Number(process.env.PORT) || 10000;
+
+// IMPORTANT: Render expects your app to bind to the service port (default is 10000 unless you changed it)
+const PORT = process.env.PORT ? Number(process.env.PORT) : 10000;
 
 // Use GOOGLE_SHEETS_API_URL in Render (recommended).
 // Keep VITE_GOOGLE_SHEETS_API_URL as fallback so existing code still works.
@@ -26,7 +31,7 @@ const __dirname = path.dirname(__filename);
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// Health check (Render-friendly)
+// Health check
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
@@ -53,20 +58,16 @@ app.post("/api/sheets", async (req, res) => {
     const contentType = response.headers.get("content-type") || "";
     const raw = await response.text();
 
-    // Pass through status code from upstream (often useful for debugging)
     res.status(response.status);
 
-    // Return JSON if upstream is JSON OR if it parses cleanly
     if (contentType.includes("application/json")) {
       try {
         return res.json(JSON.parse(raw));
       } catch {
-        // upstream lied about JSON; fall back to text
         return res.type("text/plain").send(raw);
       }
     }
 
-    // Try JSON parse anyway (some apps scripts return JSON without proper header)
     try {
       return res.json(JSON.parse(raw));
     } catch {
@@ -90,10 +91,11 @@ app.use((req, res, next) => {
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
-// Start server (Render requires listening on process.env.PORT)
+// Start server
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(
-    `📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`
-  );
+  console.log("🚀 Server listening");
+  console.log("NODE_ENV:", process.env.NODE_ENV);
+  console.log("process.env.PORT:", process.env.PORT);
+  console.log("Chosen PORT:", PORT);
+  console.log(`📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`);
 });
