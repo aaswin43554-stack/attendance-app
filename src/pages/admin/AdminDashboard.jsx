@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../../ui/Card";
 import { getAllUsers, getAllAttendanceRecords } from "../../services/supabase";
-import { logoutAdmin } from "../../services/auth";
+import { logout } from "../../services/auth";
 
 function fmt(iso) {
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
@@ -22,14 +22,14 @@ export default function AdminDashboard() {
           getAllUsers(),
           getAllAttendanceRecords()
         ]);
-        
+
         console.log("📦 Fetched users:", users);
         console.log("📊 Fetched records:", records);
 
         const employeesList = users
           .filter((u) => u.role === "employee")
           .sort((a, b) => a.name.localeCompare(b.name));
-        
+
         setEmployees(employeesList);
         setAllRecords(records);
       } catch (error) {
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
     const userRecords = allRecords
       .filter((r) => r.userName === user.name)
       .sort((a, b) => new Date(b.time) - new Date(a.time));
-    
+
     const latest = userRecords[0];
     if (!latest) return { status: "Not working", latest: null };
     return { status: latest.type === "checkin" ? "Working" : "Not working", latest };
@@ -69,8 +69,8 @@ export default function AdminDashboard() {
   };
 
   const onLogout = () => {
-    logoutAdmin();
-    nav("/admin/login");
+    logout();
+    nav("/login");
   };
 
   return (
