@@ -96,26 +96,6 @@ export async function loginAdmin({ email, pass }) {
   }
 }
 
-export async function login({ email, pass }) {
-  const e = email.trim().toLowerCase();
-
-  try {
-    const user = await getUserByEmailAndPassword(e, pass);
-    if (!user) throw new Error("Invalid credentials.");
-
-    setSession({ type: user.role, userId: user.email, userName: user.name });
-    return {
-      id: user.email,
-      name: user.name,
-      phone: user.phone,
-      email: user.email,
-      role: user.role,
-    };
-  } catch (error) {
-    throw new Error(error.message || "Invalid credentials.");
-  }
-}
-
-export function logout() {
+export function logoutAdmin() {
   setSession({ type: null, userId: null });
 }

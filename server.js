@@ -1,101 +1,75 @@
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
+import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Load .env only in local development (Render uses Environment Variables)
-if (process.env.NODE_ENV !== "production") {
-  const dotenv = await import("dotenv");
-  dotenv.default.config();
-}
+dotenv.config();
 
-process.on("unhandledRejection", (err) => console.error("unhandledRejection:", err));
-process.on("uncaughtException", (err) => console.error("uncaughtException:", err));
-
-const app = express();
-
-// IMPORTANT: Render expects your app to bind to the service port (default is 10000 unless you changed it)
-const PORT = process.env.PORT ? Number(process.env.PORT) : 10000;
-
-// Use GOOGLE_SHEETS_API_URL in Render (recommended).
-// Keep VITE_GOOGLE_SHEETS_API_URL as fallback so existing code still works.
-const GOOGLE_SHEETS_API_URL =
-  process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
-
-// __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const app = express();
+const PORT = process.env.PORT || 3000;
+const GOOGLE_SHEETS_API_URL = process.env.VITE_GOOGLE_SHEETS_API_URL;
+
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json());
+
+// Serve static files from the Vite build output
+app.use(express.static(path.join(__dirname, "dist")));
 
 // Health check
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok" });
+  res.json({ status: "ok" });
 });
 
 /**
  * Proxy endpoint for Google Sheets API
  * POST /api/sheets
+ * Forwards requests to Google Apps Script without CORS issues
  */
 app.post("/api/sheets", async (req, res) => {
   try {
     if (!GOOGLE_SHEETS_API_URL) {
       return res.status(500).json({
-        error:
-          "Google Sheets URL not configured. Set GOOGLE_SHEETS_API_URL in Render Environment Variables.",
+        error: "Google Sheets URL not configured",
       });
     }
 
+    // Forward the request to Google Apps Script
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body ?? {}),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(req.body),
     });
 
-    const contentType = response.headers.get("content-type") || "";
-    const raw = await response.text();
-
-    res.status(response.status);
-
-    if (contentType.includes("application/json")) {
-      try {
-        return res.json(JSON.parse(raw));
-      } catch {
-        return res.type("text/plain").send(raw);
-      }
+    if (!response.ok) {
+      throw new Error(`Google Sheets API returned ${response.status}`);
     }
 
-    try {
-      return res.json(JSON.parse(raw));
-    } catch {
-      return res.type("text/plain").send(raw);
-    }
+    const data = await response.json();
+    res.json(data);
   } catch (error) {
     console.error("Error proxying request to Google Sheets:", error);
-    return res.status(500).json({
-      error: error?.message || "Failed to reach Google Sheets",
+    res.status(500).json({
+      error: error.message || "Failed to reach Google Sheets",
     });
   }
 });
 
-// Serve Vite build output (dist)
-const distPath = path.join(__dirname, "dist");
-app.use(express.static(distPath, { index: false }));
-
-// SPA fallback (only for non-API routes)
-app.use((req, res, next) => {
-  if (req.path.startsWith("/api") || req.path === "/health") return next();
-  return res.sendFile(path.join(distPath, "index.html"));
+// Handle SPA routing - serve index.html for any unknown routes
+app.get("/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
+
 // Start server
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("🚀 Server listening");
-  console.log("NODE_ENV:", process.env.NODE_ENV);
-  console.log("process.env.PORT:", process.env.PORT);
-  console.log("Chosen PORT:", PORT);
+app.listen(PORT, () => {
+  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   console.log(`📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`);
 });
