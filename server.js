@@ -39,37 +39,47 @@ app.post("/api/sheets", async (req, res) => {
       });
     }
 
-    // Forward the request to Google Apps Script
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
 
     if (!response.ok) {
-      throw new Error(`Google Sheets API returned ${response.status}`);
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `Google Sheets API returned ${response.status}${
+          text ? `: ${text.slice(0, 300)}` : ""
+        }`
+      );
     }
 
-    const data = await response.json();
-    res.json(data);
+    // Apps Script sometimes returns non-json; handle safely
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      const data = await response.json();
+      return res.json(data);
+    } else {
+      const text = await response.text();
+      return res.send(text);
+    }
   } catch (error) {
     console.error("Error proxying request to Google Sheets:", error);
     res.status(500).json({
-      error: error.message || "Failed to reach Google Sheets",
+      error: error?.message || "Failed to reach Google Sheets",
     });
   }
 });
 
-// Handle SPA routing - serve index.html for any unknown routes
-app.get("/*", (req, res) => {
+// SPA fallback (Express 5 safe): serve index.html for non-API, non-health GET routes
+app.get(/^(?!\/api)(?!\/health).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
-
 
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  console.log(`📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`);
+  console.log(
+    `📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`
+  );
 });
