@@ -1,15 +1,12 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { getSession } from "../services/storage";
+import { useNavigate, useLocation } from "react-router-dom";
+import { resetDemo } from "../services/storage";
 
 export default function TopNav() {
   const nav = useNavigate();
+  const loc = useLocation();
 
   const go = (path) => nav(path);
-
-  // Your app uses session.type: "employee" | "admin"
-  const s = getSession();
-  const isLoggedIn = s?.type === "employee" || s?.type === "admin";
 
   return (
     <header className="nav">
@@ -19,14 +16,25 @@ export default function TopNav() {
         </div>
 
         <div className="navLinks">
-          {/* ✅ Show Employee/Admin only BEFORE login */}
-          {!isLoggedIn && (
-            <button className="chip" onClick={() => go("/login")}>
-              Login
-            </button>
-          )}
-
-          {/* ✅ Removed: Reset + Get Started */}
+          <button className="chip" onClick={() => go("/employee/login")}>
+            Employee
+          </button>
+          <button className="chip" onClick={() => go("/admin/login")}>
+            Admin
+          </button>
+          <button
+            className="chip"
+            onClick={() => {
+              resetDemo();
+              // stay on same page but refresh UI
+              nav(loc.pathname, { replace: true });
+            }}
+          >
+            Reset
+          </button>
+          <button className="cta" onClick={() => go("/employee/login")}>
+            Get Started
+          </button>
         </div>
       </div>
     </header>

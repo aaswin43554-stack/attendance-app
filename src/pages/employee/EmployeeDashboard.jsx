@@ -5,7 +5,7 @@ import Toast from "../../ui/Toast";
 import { getSession, getUsers } from "../../services/storage";
 import { createAttendance } from "../../services/attendance";
 import { getUserAttendanceRecords } from "../../services/supabase";
-import { logout } from "../../services/auth";
+import { logoutEmployee } from "../../services/auth";
 
 function fmt(iso) {
   try { return new Date(iso).toLocaleString(); } catch { return iso; }
@@ -72,8 +72,8 @@ export default function EmployeeDashboard() {
   };
 
   const onLogout = () => {
-    logout();
-    nav("/login");
+    logoutEmployee();
+    nav("/employee/login");
   };
 
   return (
