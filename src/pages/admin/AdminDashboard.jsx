@@ -2,10 +2,18 @@ import React, { useMemo, useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../../ui/Card";
 import { getAllUsers, getAllAttendanceRecords } from "../../services/supabase";
-import { logoutAdmin } from "../../services/auth";
+import { logout } from "../../services/auth";
+import LocationMap from "../../ui/LocationMap";
 
 function fmt(iso) {
-  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  try {
+    return new Date(iso).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch { return iso; }
 }
 
 export default function AdminDashboard() {
@@ -22,14 +30,14 @@ export default function AdminDashboard() {
           getAllUsers(),
           getAllAttendanceRecords()
         ]);
-        
+
         console.log("📦 Fetched users:", users);
         console.log("📊 Fetched records:", records);
 
         const employeesList = users
           .filter((u) => u.role === "employee")
           .sort((a, b) => a.name.localeCompare(b.name));
-        
+
         setEmployees(employeesList);
         setAllRecords(records);
       } catch (error) {
@@ -45,7 +53,7 @@ export default function AdminDashboard() {
     const userRecords = allRecords
       .filter((r) => r.userName === user.name)
       .sort((a, b) => new Date(b.time) - new Date(a.time));
-    
+
     const latest = userRecords[0];
     if (!latest) return { status: "Not working", latest: null };
     return { status: latest.type === "checkin" ? "Working" : "Not working", latest };
@@ -69,8 +77,8 @@ export default function AdminDashboard() {
   };
 
   const onLogout = () => {
-    logoutAdmin();
-    nav("/admin/login");
+    logout();
+    nav("/login");
   };
 
   return (
@@ -83,7 +91,6 @@ export default function AdminDashboard() {
             <div className="row">
               <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} Working</span>
               <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} Total</span>
-              <button className="btn btnGhost" onClick={onLogout}>Logout</button>
             </div>
           }
         >
@@ -158,10 +165,13 @@ export default function AdminDashboard() {
                           <>
                             <div className="hr" />
                             <div className="muted small"><b>Latest {latest.type}</b></div>
-                            <div className="muted mono">
-                              lat:{Number(latest.lat).toFixed(6)} lng:{Number(latest.lng).toFixed(6)}
-                            </div>
-                            <div className="muted small">{latest.address || "(address unavailable)"}</div>
+                            <LocationMap
+                              lat={latest.lat}
+                              lng={latest.lng}
+                              address={latest.address}
+                              height="200px"
+                            />
+                            <div className="muted small" style={{ marginTop: 8 }}>{latest.address || "(address unavailable)"}</div>
                             <div className="muted2 small" style={{ marginTop: 6 }}>
                               <b>Device:</b> {latest.device?.platform || ""}
                             </div>

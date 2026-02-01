@@ -1,33 +1,41 @@
 export function getCurrentPosition() {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      console.warn("⚠️ Geolocation not available, using mock location");
-      return resolve({
-        coords: {
-          latitude: 28.6139,
-          longitude: 77.2090,
-          accuracy: 10
-        }
-      });
+      return reject(new Error("Geolocation is not supported by this browser."));
     }
-    
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        console.log("✅ Real GPS location:", position.coords);
+        const { accuracy } = position.coords;
+        console.log("✅ GPS location acquired. Accuracy:", accuracy, "meters");
+
+        if (accuracy > 1000) {
+          console.warn("⚠️ Low accuracy detected (>1km). This might be IP-based location.");
+        }
+
         resolve(position);
       },
       (error) => {
-        console.warn("❌ GPS Error:", error.message);
-        console.log("📍 Using mock location as fallback");
-        resolve({
-          coords: {
-            latitude: 28.6139,
-            longitude: 77.2090,
-            accuracy: 10
-          }
-        });
+        let msg = "Failed to get location.";
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            msg = "Location permission denied. Please enable GPS and allow access.";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            msg = "Location information is unavailable. Check your GPS signal.";
+            break;
+          case error.TIMEOUT:
+            msg = "Location request timed out. Try again in an open area.";
+            break;
+        }
+        console.error("❌ GPS Error:", msg, error);
+        reject(new Error(msg));
       },
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+      {
+        enableHighAccuracy: true,
+        timeout: 15000, // Increased timeout to 15s
+        maximumAge: 0   // Force fresh location
+      }
     );
   });
 }

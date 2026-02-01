@@ -5,10 +5,18 @@ import Toast from "../../ui/Toast";
 import { getSession, getUsers } from "../../services/storage";
 import { createAttendance } from "../../services/attendance";
 import { getUserAttendanceRecords } from "../../services/supabase";
-import { logoutEmployee } from "../../services/auth";
+import { logout } from "../../services/auth";
+import LocationMap from "../../ui/LocationMap";
 
 function fmt(iso) {
-  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  try {
+    return new Date(iso).toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch { return iso; }
 }
 
 export default function EmployeeDashboard() {
@@ -29,6 +37,7 @@ export default function EmployeeDashboard() {
   const [logs, setLogs] = useState([]);
   const [status, setStatus] = useState({ status: "Not working", latest: null });
   const [busy, setBusy] = useState(false);
+  const [showMaps, setShowMaps] = useState({}); // track which logs have map visible
 
   const refresh = async () => {
     if (!me) return;
@@ -72,8 +81,8 @@ export default function EmployeeDashboard() {
   };
 
   const onLogout = () => {
-    logoutEmployee();
-    nav("/employee/login");
+    logout();
+    nav("/login");
   };
 
   return (
@@ -92,7 +101,6 @@ export default function EmployeeDashboard() {
           <div className="row">
             <button className="btn btnOk" disabled={busy} onClick={() => doAction("checkin")}>Check-in</button>
             <button className="btn btnDanger" disabled={busy} onClick={() => doAction("checkout")}>Check-out</button>
-            <button className="btn btnGhost" style={{ marginLeft: "auto" }} onClick={onLogout}>Logout</button>
           </div>
 
           <div className="hr" />
@@ -110,8 +118,22 @@ export default function EmployeeDashboard() {
                       {r.type === "checkin" ? "Check-in" : "Check-out"}{" "}
                       <span className="muted2" style={{ fontWeight: 700 }}>• {fmt(r.time)}</span>
                     </div>
-                    <div className="muted mono">lat:{Number(r.lat).toFixed(6)} lng:{Number(r.lng).toFixed(6)}</div>
-                    <div className="muted small">{r.address || "(address unavailable)"}</div>
+
+                    {showMaps[r.id] ? (
+                      <LocationMap
+                        lat={parseFloat(r.lat)}
+                        lng={parseFloat(r.lng)}
+                        address={r.address}
+                        height="180px"
+                      />
+                    ) : (
+                      <div className="mt10">
+                        <button className="btn btnGhost small" onClick={() => setShowMaps(p => ({ ...p, [r.id]: true }))}>
+                          Show Map
+                        </button>
+                      </div>
+                    )}
+                    <div className="muted small" style={{ marginTop: 8 }}>{r.address || "(address unavailable)"}</div>
                   </div>
                   <div className="muted2 small" style={{ textAlign: "right" }}>
                     <div className="mono">{r.device?.platform || ""}</div>

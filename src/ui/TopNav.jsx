@@ -1,12 +1,20 @@
 import React from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { resetDemo } from "../services/storage";
+import { useNavigate } from "react-router-dom";
+import { getSession } from "../services/storage";
+import { logout } from "../services/auth";
 
 export default function TopNav() {
   const nav = useNavigate();
-  const loc = useLocation();
 
   const go = (path) => nav(path);
+
+  const onLogout = () => {
+    logout();
+    nav("/login");
+  };
+
+  const s = getSession();
+  const isLoggedIn = s?.type === "employee" || s?.type === "admin";
 
   return (
     <header className="nav">
@@ -16,25 +24,20 @@ export default function TopNav() {
         </div>
 
         <div className="navLinks">
-          <button className="chip" onClick={() => go("/employee/login")}>
-            Employee
-          </button>
-          <button className="chip" onClick={() => go("/admin/login")}>
-            Admin
-          </button>
-          <button
-            className="chip"
-            onClick={() => {
-              resetDemo();
-              // stay on same page but refresh UI
-              nav(loc.pathname, { replace: true });
-            }}
-          >
-            Reset
-          </button>
-          <button className="cta" onClick={() => go("/employee/login")}>
-            Get Started
-          </button>
+          {/* ✅ Show Employee/Admin only BEFORE login */}
+          {isLoggedIn && (
+            <button className="chip" onClick={onLogout}>
+              Logout
+            </button>
+          )}
+
+          {!isLoggedIn && (
+            <button className="chip" onClick={() => go("/login")}>
+              Login
+            </button>
+          )}
+
+          {/* ✅ Removed: Reset + Get Started */}
         </div>
       </div>
     </header>
