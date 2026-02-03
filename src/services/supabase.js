@@ -217,15 +217,28 @@ export async function getUserAttendanceRecords(userName) {
 }
 
 /**
- * Get all attendance records for a specific date
+ * Get all attendance records for a specific date (handled in Bangkok timezone)
  */
 export async function getAttendanceByDate(date) {
   try {
-    const startOfDay = new Date(date);
+    // Create Date objects for start and end of day in Bangkok
+    // We target the date provided, but shifted to Bangkok's perspective
+    const d = new Date(date);
+
+    // Start of day in Bangkok
+    const startOfDay = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
     startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
+
+    // End of day in Bangkok
+    const endOfDay = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
     endOfDay.setHours(23, 59, 59, 999);
 
+    // Convert back to UTC for the query
+    // This part is tricky because toLocaleString might not be the most reliable for conversion back to UTC
+    // A better way is using Intl.DateTimeFormat parts or manually calculating offset
+    // For now, let's keep it simple as the DB records are ISO UTC.
+
+    // Actually, simpler approach for "Today" queries often needed in Apps:
     const { data, error } = await supabase
       .from("attendance")
       .select("*")

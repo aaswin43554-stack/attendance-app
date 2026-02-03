@@ -1,6 +1,7 @@
 import { getAttendance, setAttendance } from "./storage";
 import { getCurrentPosition, reverseGeocode, deviceInfo } from "./geo";
 import { recordAttendance, getUserAttendanceRecords } from "./supabase";
+import { getNetworkTime } from "../utils/date";
 
 export async function latestStatusFor(userName) {
   try {
@@ -34,7 +35,7 @@ export async function createAttendance({ userId, type, userName }) {
     userId,
     userName,
     type, // checkin / checkout
-    time: new Date().toISOString(),
+    time: await getNetworkTime(),
     lat,
     lng,
     address,

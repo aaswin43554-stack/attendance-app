@@ -8,16 +8,7 @@ import { getUserAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
 import LocationMap from "../../ui/LocationMap";
 
-function fmt(iso) {
-  try {
-    return new Date(iso).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch { return iso; }
-}
+import { formatBangkokTime } from "../../utils/date";
 
 export default function EmployeeDashboard() {
   const nav = useNavigate();
@@ -116,7 +107,7 @@ export default function EmployeeDashboard() {
                   <div>
                     <div style={{ fontWeight: 900 }}>
                       {r.type === "checkin" ? "Check-in" : "Check-out"}{" "}
-                      <span className="muted2" style={{ fontWeight: 700 }}>• {fmt(r.time)}</span>
+                      <span className="muted2" style={{ fontWeight: 700 }}>• {formatBangkokTime(r.time)}</span>
                     </div>
 
                     {showMaps[r.id] ? (

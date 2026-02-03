@@ -5,16 +5,7 @@ import { getAllUsers, getAllAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
 import LocationMap from "../../ui/LocationMap";
 
-function fmt(iso) {
-  try {
-    return new Date(iso).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch { return iso; }
-}
+import { formatBangkokTime } from "../../utils/date";
 
 export default function AdminDashboard() {
   const nav = useNavigate();
@@ -105,7 +96,7 @@ export default function AdminDashboard() {
                   <div className="muted small">No employees yet.</div>
                 ) : employees.map((u) => {
                   const st = getLatestStatus(u);
-                  const latestTime = st.latest ? fmt(st.latest.time) : "—";
+                  const latestTime = st.latest ? formatBangkokTime(st.latest.time) : "—";
                   const dotColor = st.status === "Working" ? "var(--ok)" : "#cbd5e1";
 
                   return (
@@ -157,7 +148,7 @@ export default function AdminDashboard() {
                             <span>{st.status}</span>
                           </span>
                           <span className="pill">
-                            <span className="muted2">Last:</span> <span>{latest ? fmt(latest.time) : "—"}</span>
+                            <span className="muted2">Last:</span> <span>{latest ? formatBangkokTime(latest.time) : "—"}</span>
                           </span>
                         </div>
 
@@ -192,7 +183,7 @@ export default function AdminDashboard() {
                           <div>
                             <div style={{ fontWeight: 900 }}>
                               {r.type === "checkin" ? "Check-in" : "Check-out"}{" "}
-                              <span className="muted2" style={{ fontWeight: 700 }}>• {fmt(r.time)}</span>
+                              <span className="muted2" style={{ fontWeight: 700 }}>• {formatBangkokTime(r.time)}</span>
                             </div>
                             <div className="muted mono">lat:{Number(r.lat).toFixed(6)} lng:{Number(r.lng).toFixed(6)}</div>
                             <div className="muted small">{r.address || "(address unavailable)"}</div>
