@@ -18,6 +18,35 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 console.log("✅ Supabase client initialized");
 
+/* -------------------- helpers -------------------- */
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeDevice(device) {
+  if (device == null) return null;
+  if (typeof device === "string") return device; // already string
+  // object / array
+  try {
+    return JSON.stringify(device);
+  } catch {
+    return String(device);
+  }
+}
+
+function mapDeviceField(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    device: typeof row.device === "string" ? safeJsonParse(row.device) : row.device,
+  };
+}
+/* ------------------------------------------------- */
+
 // ============ USER AUTHENTICATION ============
 
 /**
@@ -53,9 +82,9 @@ export async function addUser(user) {
   try {
     console.log("➕ Adding new user:", user.email);
 
-    const { data, error } = await supabase.from("users").insert([
+    const { error } = await supabase.from("users").insert([
       {
-        email: user.email,
+        email: String(user.email || "").toLowerCase(),
         password: user.pass,
         name: user.name,
         phone: user.phone || "",
@@ -87,9 +116,10 @@ export async function userExists(email) {
     const { data, error } = await supabase
       .from("users")
       .select("email")
-      .eq("email", email.toLowerCase())
+      .eq("email", String(email || "").toLowerCase())
       .single();
 
+    // PGRST116 = "Results contain 0 rows"
     if (error && error.code !== "PGRST116") {
       console.error("❌ Error checking user existence:", error);
       throw error;
@@ -114,7 +144,7 @@ export async function getUserByEmailAndPassword(email, password) {
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("email", email.toLowerCase())
+      .eq("email", String(email || "").toLowerCase())
       .eq("password", password)
       .single();
 
@@ -123,11 +153,8 @@ export async function getUserByEmailAndPassword(email, password) {
       throw error;
     }
 
-    if (data) {
-      console.log("✅ User authenticated:", data.name);
-    } else {
-      console.log("❌ Invalid credentials");
-    }
+    if (data) console.log("✅ User authenticated:", data.name);
+    else console.log("❌ Invalid credentials");
 
     return data || null;
   } catch (error) {
@@ -146,7 +173,7 @@ export async function getUserByEmail(email) {
     const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("email", email.toLowerCase())
+      .eq("email", String(email || "").toLowerCase())
       .single();
 
     if (error && error.code !== "PGRST116") {
@@ -154,11 +181,8 @@ export async function getUserByEmail(email) {
       throw error;
     }
 
-    if (data) {
-      console.log("✅ User found:", data.name);
-    } else {
-      console.log("❌ User not found");
-    }
+    if (data) console.log("✅ User found:", data.name);
+    else console.log("❌ User not found");
 
     return data || null;
   } catch (error) {
@@ -171,15 +195,23 @@ export async function getUserByEmail(email) {
 
 /**
  * Record attendance (check-in or check-out) to Supabase
+ * attendanceRecord expected keys:
+ * userId (email), userName, type, time, lat, lng, address, device
  */
 export async function recordAttendance(attendanceRecord) {
   try {
-    console.log("📤 Sending to Supabase:", attendanceRecord);
+    const clean = {
+      ...attendanceRecord,
+      userId: attendanceRecord.userId
+        ? String(attendanceRecord.userId).toLowerCase()
+        : attendanceRecord.userId,
+      time: attendanceRecord.time || new Date().toISOString(),
+      device: normalizeDevice(attendanceRecord.device),
+    };
 
-    const { data, error } = await supabase
-      .from("attendance")
-      .insert([attendanceRecord]);
+    console.log("📤 Sending to Supabase:", clean);
 
+    const { data, error } = await supabase.from("attendance").insert([clean]);
     if (error) {
       console.error("❌ Supabase Error:", error);
       throw error;
@@ -195,21 +227,22 @@ export async function recordAttendance(attendanceRecord) {
 }
 
 /**
- * Get all attendance records for a user from Supabase
+ * Get all attendance records for a user (✅ corrected: userId/email based)
  */
-export async function getUserAttendanceRecords(userName) {
+export async function getUserAttendanceRecords(userId) {
   try {
+    const uid = String(userId || "").toLowerCase();
+    if (!uid) return [];
+
     const { data, error } = await supabase
       .from("attendance")
       .select("*")
-      .eq("userName", userName)
+      .eq("userId", uid)
       .order("time", { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(r => ({
-      ...r,
-      device: typeof r.device === 'string' ? JSON.parse(r.device) : r.device
-    }));
+
+    return (data || []).map(mapDeviceField);
   } catch (error) {
     console.error("Error fetching attendance records:", error.message);
     throw new Error("Failed to fetch attendance records");
@@ -217,28 +250,25 @@ export async function getUserAttendanceRecords(userName) {
 }
 
 /**
- * Get all attendance records for a specific date (handled in Bangkok timezone)
+ * Get all attendance records for a specific date (Bangkok timezone)
+ * date can be "YYYY-MM-DD" or Date object
  */
 export async function getAttendanceByDate(date) {
   try {
-    // Create Date objects for start and end of day in Bangkok
-    // We target the date provided, but shifted to Bangkok's perspective
     const d = new Date(date);
+    if (Number.isNaN(d.getTime())) throw new Error("Invalid date");
 
-    // Start of day in Bangkok
-    const startOfDay = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-    startOfDay.setHours(0, 0, 0, 0);
+    // Build Bangkok start/end (by formatting day in Bangkok then constructing boundaries)
+    const bangkokDay = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Bangkok",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d); // "YYYY-MM-DD"
 
-    // End of day in Bangkok
-    const endOfDay = new Date(d.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
-    endOfDay.setHours(23, 59, 59, 999);
+    const startOfDay = new Date(`${bangkokDay}T00:00:00.000+07:00`);
+    const endOfDay = new Date(`${bangkokDay}T23:59:59.999+07:00`);
 
-    // Convert back to UTC for the query
-    // This part is tricky because toLocaleString might not be the most reliable for conversion back to UTC
-    // A better way is using Intl.DateTimeFormat parts or manually calculating offset
-    // For now, let's keep it simple as the DB records are ISO UTC.
-
-    // Actually, simpler approach for "Today" queries often needed in Apps:
     const { data, error } = await supabase
       .from("attendance")
       .select("*")
@@ -247,10 +277,8 @@ export async function getAttendanceByDate(date) {
       .order("time", { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(r => ({
-      ...r,
-      device: typeof r.device === 'string' ? JSON.parse(r.device) : r.device
-    }));
+
+    return (data || []).map(mapDeviceField);
   } catch (error) {
     console.error("Error fetching attendance by date:", error.message);
     throw error;
@@ -268,10 +296,8 @@ export async function getAllAttendanceRecords() {
       .order("time", { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(r => ({
-      ...r,
-      device: typeof r.device === 'string' ? JSON.parse(r.device) : r.device
-    }));
+
+    return (data || []).map(mapDeviceField);
   } catch (error) {
     console.error("Error fetching all attendance records:", error.message);
     throw error;
