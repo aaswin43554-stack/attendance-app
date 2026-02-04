@@ -118,8 +118,7 @@ export default function EmployeeDashboard() {
     if (!me) return;
     try {
       // IMPORTANT: your function currently uses me.name
-      const records = await getUserAttendanceRecords(me.name);
-
+      const records = await getUserAttendanceRecords(me.id); // email
       // monthly summary computed from ALL records
       setSummary(buildMonthlySummary(records, year, month));
 
