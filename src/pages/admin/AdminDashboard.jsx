@@ -5,7 +5,9 @@ import { getAllUsers, getAllAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
 import LocationMap from "../../ui/LocationMap";
 
-import { formatBangkokTime } from "../../utils/date";
+import { formatBangkokTime, parseISO, getBangkokYMD } from "../../utils/date";
+
+import AttendanceCalendar from "../../ui/AttendanceCalendar";
 
 export default function AdminDashboard() {
   const nav = useNavigate();
@@ -13,6 +15,7 @@ export default function AdminDashboard() {
   const [employees, setEmployees] = useState([]);
   const [allRecords, setAllRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(new Date());
 
   useEffect(() => {
     async function fetchData() {
@@ -21,9 +24,6 @@ export default function AdminDashboard() {
           getAllUsers(),
           getAllAttendanceRecords()
         ]);
-
-        console.log("📦 Fetched users:", users);
-        console.log("📊 Fetched records:", records);
 
         const employeesList = users
           .filter((u) => u.role === "employee")
@@ -38,16 +38,58 @@ export default function AdminDashboard() {
       }
     }
     fetchData();
+
+    // Timer to refresh "current session" every 10 seconds
+    const interval = setInterval(() => setNow(new Date()), 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const getLatestStatus = (user) => {
     const userRecords = allRecords
       .filter((r) => r.userName === user.name)
-      .sort((a, b) => new Date(b.time) - new Date(a.time));
+      .sort((a, b) => parseISO(b.time) - parseISO(a.time));
 
     const latest = userRecords[0];
     if (!latest) return { status: "Not working", latest: null };
     return { status: latest.type === "checkin" ? "Working" : "Not working", latest };
+  };
+
+  const calculateTodayStats = (userName) => {
+    const todayYMD = getBangkokYMD(new Date());
+
+    const todayRecords = allRecords
+      .filter((r) => {
+        if (r.userName !== userName) return false;
+        const d = parseISO(r.time);
+        return getBangkokYMD(d) === todayYMD;
+      })
+      .sort((a, b) => parseISO(a.time) - parseISO(b.time));
+
+    let totalMs = 0;
+    let activeStartTime = null;
+
+    todayRecords.forEach((r) => {
+      if (r.type === "checkin") {
+        activeStartTime = parseISO(r.time);
+      } else if (r.type === "checkout" && activeStartTime) {
+        totalMs += parseISO(r.time) - activeStartTime;
+        activeStartTime = null;
+      }
+    });
+
+    if (activeStartTime) {
+      totalMs += now - activeStartTime;
+    }
+
+    const hours = Math.floor(totalMs / 3600000);
+    const minutes = Math.floor((totalMs % 3600000) / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+
+    return {
+      totalTime: `${hours}h ${minutes}m ${seconds}s`,
+      isActive: !!activeStartTime,
+      ms: totalMs
+    };
   };
 
   const getUserLogs = (userName) => {
@@ -82,6 +124,7 @@ export default function AdminDashboard() {
             <div className="row">
               <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} Working</span>
               <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} Total</span>
+              <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 12 }}>Logout</button>
             </div>
           }
         >
@@ -133,8 +176,10 @@ export default function AdminDashboard() {
                   {(() => {
                     const st = getLatestStatus(selected);
                     const latest = st.latest;
+                    const stats = calculateTodayStats(selected.name);
+
                     return (
-                      <div className="item" style={{ cursor: "default" }}>
+                      <div className="item" style={{ cursor: "default", borderLeft: stats.isActive ? "4px solid var(--ok)" : "none" }}>
                         <div style={{ fontWeight: 950, fontSize: 16 }}>{selected.name}</div>
                         <div className="muted small">
                           {selected.email}{selected.phone ? " • " + selected.phone : ""}
@@ -142,14 +187,21 @@ export default function AdminDashboard() {
 
                         <div className="hr" />
 
-                        <div className="row" style={{ justifyContent: "space-between" }}>
-                          <span className="pill">
-                            <span className="dot" style={{ background: st.status === "Working" ? "var(--ok)" : "#cbd5e1" }} />
-                            <span>{st.status}</span>
-                          </span>
-                          <span className="pill">
-                            <span className="muted2">Last:</span> <span>{latest ? formatBangkokTime(latest.time) : "—"}</span>
-                          </span>
+                        <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
+                          <div>
+                            <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>Today's Working Hours</div>
+                            <div style={{ fontSize: "1.2rem", fontWeight: 900, color: stats.isActive ? "var(--ok)" : "var(--text)" }}>
+                              {stats.totalTime}
+                            </div>
+                            {stats.isActive && <div className="muted2 small">Active Session Running...</div>}
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <span className="pill" style={{ marginBottom: 4, display: "inline-flex" }}>
+                              <span className="dot" style={{ background: st.status === "Working" ? "var(--ok)" : "#cbd5e1" }} />
+                              <span>{st.status}</span>
+                            </span>
+                            <div className="muted small">Last: {latest ? formatBangkokTime(latest.time) : "—"}</div>
+                          </div>
                         </div>
 
                         {latest ? (
@@ -199,6 +251,8 @@ export default function AdminDashboard() {
               )}
             </div>
           </div>
+
+          <AttendanceCalendar employees={employees} allRecords={allRecords} />
         </Card>
       </section>
     </main>

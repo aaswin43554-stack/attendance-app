@@ -74,6 +74,45 @@ export async function getNetworkTime() {
 }
 
 /**
+ * Parses a date string and ensures it's treated as UTC if no timezone is provided.
+ * This prevents browsers from interpreting DB timestamps as local time.
+ * 
+ * @param {string|Date} dateVal - Date string or object
+ * @returns {Date} Parsed Date object
+ */
+export function parseISO(dateVal) {
+    if (dateVal instanceof Date) return dateVal;
+    if (!dateVal) return new Date();
+
+    let str = String(dateVal);
+    // If no timezone info, treat as UTC
+    if (!str.includes('Z') && !/[+-]\d{2}(:?\d{2})?$/.test(str)) {
+        str = str.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(str);
+    return isNaN(d.getTime()) ? new Date() : d;
+}
+
+/**
+ * Returns a YYYY-MM-DD string representing the date in Bangkok timezone.
+ * 
+ * @param {Date} date 
+ * @returns {string} 
+ */
+export function getBangkokYMD(date) {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Bangkok',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric'
+    }).formatToParts(date);
+    const day = parts.find(p => p.type === 'day').value;
+    const month = parts.find(p => p.type === 'month').value;
+    const year = parts.find(p => p.type === 'year').value;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+}
+
+/**
  * Gets the current time in Bangkok as an ISO string
  * @deprecated Use getNetworkTime() for more reliability
  * @returns {string} ISO string
