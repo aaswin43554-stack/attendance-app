@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
 import Toast from "../ui/Toast";
 import { login } from "../services/auth";
+import { useLanguage } from "../context/LanguageContext";
 
 export default function Login() {
     const nav = useNavigate();
@@ -10,6 +11,7 @@ export default function Login() {
     const [pass, setPass] = useState("");
     const [toast, setToast] = useState("");
     const [loading, setLoading] = useState(false);
+    const { t } = useLanguage();
 
     const onLogin = async () => {
         try {
@@ -32,7 +34,7 @@ export default function Login() {
     return (
         <main className="page">
             <section className="grid">
-                <Card title="Login" subtitle="Sign in to access your dashboard.">
+                <Card title={t('loginTitle')} subtitle={t('loginSubtitle')}>
                     <form
                         onSubmit={(e) => {
                             e.preventDefault();
@@ -42,7 +44,7 @@ export default function Login() {
                     >
                         <div className="grid2">
                             <div>
-                                <label>Email</label>
+                                <label>{t('email')}</label>
                                 <input
                                     name="login_email"
                                     value={email}
@@ -57,7 +59,7 @@ export default function Login() {
                             </div>
 
                             <div>
-                                <label>Password</label>
+                                <label>{t('password')}</label>
                                 <input
                                     name="login_pass"
                                     type="password"
@@ -75,7 +77,7 @@ export default function Login() {
 
                         <div className="row mt12">
                             <button className="btn btnPrimary" type="submit" disabled={loading}>
-                                {loading ? "Signing in..." : "Login"}
+                                {loading ? t('signIn') : t('loginBtn')}
                             </button>
                         </div>
                     </form>
@@ -83,23 +85,23 @@ export default function Login() {
                     <div className="hr" />
 
                     <div className="muted small">
-                        New employee?{" "}
+                        {t('newEmployee')}{" "}
                         <button className="linkBtn" onClick={() => nav("/employee/signup")}>
-                            Create an account
+                            {t('createAccount')}
                         </button>
                     </div>
                 </Card>
 
                 <Card
-                    title="Attendance System"
-                    subtitle="One portal for everyone."
+                    title={t('portalTitle')}
+                    subtitle={t('portalSubtitle')}
                 >
                     <div className="muted small" style={{ lineHeight: 1.7 }}>
-                        • Employees can mark attendance and view logs.
+                        • {t('portalPoint1')}
                         <br />
-                        • Admins can monitor team status and location.
+                        • {t('portalPoint2')}
                         <br />
-                        • Secure and automated tracking.
+                        • {t('portalPoint3')}
                     </div>
                 </Card>
             </section>

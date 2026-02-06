@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../ui/Card";
 import { getAllUsers, getAllAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
+import { useLanguage } from "../../context/LanguageContext";
 import LocationMap from "../../ui/LocationMap";
 
 import { formatBangkokTime, parseISO, getBangkokYMD, getBangkokTimeParts } from "../../utils/date";
@@ -16,6 +17,13 @@ export default function AdminDashboard() {
   const [allRecords, setAllRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
+
+  // Work hours settings
+  const [workStart, setWorkStart] = useState(() => localStorage.getItem("work_start") || "10:00");
+  const [workEnd, setWorkEnd] = useState(() => localStorage.getItem("work_end") || "18:00");
+  const [showSettings, setShowSettings] = useState(false);
+
+  const { t } = useLanguage();
 
   useEffect(() => {
     async function fetchData() {
@@ -50,8 +58,8 @@ export default function AdminDashboard() {
       .sort((a, b) => parseISO(b.time) - parseISO(a.time));
 
     const latest = userRecords[0];
-    if (!latest) return { status: "Not working", latest: null };
-    return { status: latest.type === "checkin" ? "Working" : "Not working", latest };
+    if (!latest) return { status: t('statusNotWorking'), latest: null };
+    return { status: latest.type === "checkin" ? t('statusWorking') : t('statusNotWorking'), latest };
   };
 
   const calculateTodayStats = (userName) => {
@@ -78,7 +86,8 @@ export default function AdminDashboard() {
         if (!firstCheckin) {
           firstCheckin = time;
           const { hours, minutes } = getBangkokTimeParts(time);
-          if (hours > 10 || (hours === 10 && minutes > 0)) {
+          const [limitH, limitM] = workStart.split(":").map(Number);
+          if (hours > limitH || (hours === limitH && minutes > limitM)) {
             isLateLogin = true;
           }
         }
@@ -94,8 +103,9 @@ export default function AdminDashboard() {
     if (activeStartTime) {
       totalMs += now - activeStartTime;
     } else if (lastCheckout) {
-      const { hours } = getBangkokTimeParts(lastCheckout);
-      if (hours < 18) {
+      const { hours, minutes } = getBangkokTimeParts(lastCheckout);
+      const [limitH, limitM] = workEnd.split(":").map(Number);
+      if (hours < limitH || (hours === limitH && minutes < limitM)) {
         isEarlyLogout = true;
       }
     }
@@ -135,15 +145,46 @@ export default function AdminDashboard() {
     nav("/login");
   };
 
+  const saveWorkSettings = () => {
+    localStorage.setItem("work_start", workStart);
+    localStorage.setItem("work_end", workEnd);
+    alert(t('settingsSaved'));
+    setShowSettings(false);
+  };
+
+  const sendEmailAlert = (employee, type, date, time) => {
+    const subject = type === 'late' ? t('lateLoginAlertSubject') : t('earlyLogoutAlertSubject');
+    const typeLabel = type === 'late' ? t('lateLogin') : t('earlyLogout');
+    const body = t('emailAlertBody')
+      .replace('{name}', employee.name)
+      .replace('{email}', employee.email)
+      .replace('{type}', typeLabel)
+      .replace('{date}', date)
+      .replace('{time}', time);
+
+    const mailto = `mailto:aaswin43554@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailto;
+  };
+
   const downloadCSV = () => {
     const headers = ["Name", "Email", "Date", "Time", "Type", "Address", "Platform"];
+
+    // Create a map for quick email lookup
+    const emailMap = {};
+    employees.forEach(emp => {
+      emailMap[emp.name] = emp.email;
+    });
+
     const rows = allRecords.map(r => {
       const { hours, minutes, seconds } = getBangkokTimeParts(r.time);
       const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
+      // Look up email from the map
+      const userEmail = emailMap[r.userName] || "";
+
       return [
         r.userName,
-        r.userEmail || "",
+        userEmail,
         getBangkokYMD(parseISO(r.time)),
         timeStr,
         r.type,
@@ -172,30 +213,64 @@ export default function AdminDashboard() {
     <main className="page">
       <section className="single">
         <Card
-          title="Admin Dashboard"
-          subtitle="Click an employee to view details. Click again to minimize."
+          title={t('adminDashboard')}
+          subtitle={t('adminSubtitle')}
           right={
             <div className="row">
-              <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} Working</span>
-              <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} Total</span>
-              <button onClick={downloadCSV} className="btn-icon" style={{ marginLeft: 12, background: "var(--primary)", color: "white" }}>Export CSV</button>
-              <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 8 }}>Logout</button>
+              <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} {t('working')}</span>
+              <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} {t('total')}</span>
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="btn-icon"
+                style={{ marginLeft: 12, background: showSettings ? "var(--bg)" : "white" }}
+              >
+                ⚙️ {t('settings')}
+              </button>
+              <button onClick={downloadCSV} className="btn-icon" style={{ marginLeft: 8, background: "var(--primary)", color: "white" }}>{t('exportCSV')}</button>
+              <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 8 }}>{t('logout')}</button>
             </div>
           }
         >
+          {showSettings && (
+            <div className="item" style={{ marginBottom: 20, borderTop: "2px solid var(--primary)" }}>
+              <h3 className="title">{t('settings')}</h3>
+              <div className="grid2" style={{ gap: 20 }}>
+                <div>
+                  <label>{t('workStartTime')}</label>
+                  <input
+                    type="time"
+                    value={workStart}
+                    onChange={e => setWorkStart(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label>{t('workEndTime')}</label>
+                  <input
+                    type="time"
+                    value={workEnd}
+                    onChange={e => setWorkEnd(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="row mt12">
+                <button className="btn btnPrimary" onClick={saveWorkSettings}>{t('saveSettings')}</button>
+              </div>
+            </div>
+          )}
+
           <div className="adminGrid">
             <div>
-              <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>Employees</h3>
+              <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('employees')}</h3>
 
               <div className="list">
                 {loading ? (
-                  <div className="muted small">Loading employees...</div>
+                  <div className="muted small">{t('loadingEmployees')}</div>
                 ) : employees.length === 0 ? (
-                  <div className="muted small">No employees yet.</div>
+                  <div className="muted small">{t('noEmployees')}</div>
                 ) : employees.map((u) => {
                   const st = getLatestStatus(u);
                   const latestTime = st.latest ? formatBangkokTime(st.latest.time) : "—";
-                  const dotColor = st.status === "Working" ? "var(--ok)" : "#cbd5e1";
+                  const dotColor = st.status === t('statusWorking') ? "var(--ok)" : "#cbd5e1";
 
                   return (
                     <div
@@ -208,13 +283,13 @@ export default function AdminDashboard() {
                           <div style={{ fontWeight: 900 }}>
                             {u.name} <span className="muted2" style={{ fontWeight: 700 }}>({u.email})</span>
                           </div>
-                          <div className="muted small">Last: {latestTime}</div>
+                          <div className="muted small">{t('last')}: {latestTime}</div>
                           <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
                             {calculateTodayStats(u.name).isLateLogin && (
-                              <span className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "10px", padding: "2px 6px" }}>Late Login</span>
+                              <span className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "10px", padding: "2px 6px" }}>{t('lateLogin')}</span>
                             )}
                             {calculateTodayStats(u.name).isEarlyLogout && (
-                              <span className="pill" style={{ background: "#fef3c7", color: "#92400e", fontSize: "10px", padding: "2px 6px" }}>Early Logout</span>
+                              <span className="pill" style={{ background: "#fef3c7", color: "#92400e", fontSize: "10px", padding: "2px 6px" }}>{t('earlyLogout')}</span>
                             )}
                           </div>
                         </div>
@@ -230,10 +305,10 @@ export default function AdminDashboard() {
             </div>
 
             <div>
-              <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>Details</h3>
+              <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('details')}</h3>
 
               {!selected ? (
-                <div className="muted small">Select an employee to view latest location and logs.</div>
+                <div className="muted small">{t('selectEmployee')}</div>
               ) : (
                 <>
                   {(() => {
@@ -252,50 +327,68 @@ export default function AdminDashboard() {
 
                         <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
                           <div>
-                            <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>Today's Working Hours</div>
+                            <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>{t('todayWorkingHours')}</div>
                             <div style={{ fontSize: "1.2rem", fontWeight: 900, color: stats.isActive ? "var(--ok)" : "var(--text)" }}>
                               {stats.totalTime}
                             </div>
-                            {stats.isActive && <div className="muted2 small">Active Session Running...</div>}
-                            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                            {stats.isActive && <div className="muted2 small">{t('activeSession')}</div>}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
                               {stats.isLateLogin && (
-                                <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
-                                  ⚠️ Late Login (After 10:00)
+                                <div className="column" style={{ gap: 4 }}>
+                                  <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
+                                    {t('lateLoginWarning')}
+                                  </div>
+                                  <button
+                                    className="btn btnGhost small"
+                                    style={{ fontSize: 10, padding: "2px 8px" }}
+                                    onClick={() => sendEmailAlert(selected, 'late', getBangkokYMD(new Date()), stats.totalTime)}
+                                  >
+                                    📧 {t('sendEmailAlert')}
+                                  </button>
                                 </div>
                               )}
                               {stats.isEarlyLogout && (
-                                <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
-                                  ⚠️ Early Logout (Before 18:00)
+                                <div className="column" style={{ gap: 4 }}>
+                                  <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
+                                    {t('earlyLogoutWarning')}
+                                  </div>
+                                  <button
+                                    className="btn btnGhost small"
+                                    style={{ fontSize: 10, padding: "2px 8px" }}
+                                    onClick={() => sendEmailAlert(selected, 'early', getBangkokYMD(new Date()), stats.totalTime)}
+                                  >
+                                    📧 {t('sendEmailAlert')}
+                                  </button>
                                 </div>
                               )}
                             </div>
                           </div>
                           <div style={{ textAlign: "right" }}>
                             <span className="pill" style={{ marginBottom: 4, display: "inline-flex" }}>
-                              <span className="dot" style={{ background: st.status === "Working" ? "var(--ok)" : "#cbd5e1" }} />
+                              <span className="dot" style={{ background: st.status === t('statusWorking') ? "var(--ok)" : "#cbd5e1" }} />
                               <span>{st.status}</span>
                             </span>
-                            <div className="muted small">Last: {latest ? formatBangkokTime(latest.time) : "—"}</div>
+                            <div className="muted small">{t('last')}: {latest ? formatBangkokTime(latest.time) : "—"}</div>
                           </div>
                         </div>
 
                         {latest ? (
                           <>
                             <div className="hr" />
-                            <div className="muted small"><b>Latest {latest.type}</b></div>
+                            <div className="muted small"><b>{t('latest')} {latest.type === "checkin" ? t('checkin') : t('checkout')}</b></div>
                             <LocationMap
                               lat={latest.lat}
                               lng={latest.lng}
                               address={latest.address}
                               height="200px"
                             />
-                            <div className="muted small" style={{ marginTop: 8 }}>{latest.address || "(address unavailable)"}</div>
+                            <div className="muted small" style={{ marginTop: 8 }}>{latest.address || t('addressUnavailable')}</div>
                             <div className="muted2 small" style={{ marginTop: 6 }}>
-                              <b>Device:</b> {latest.device?.platform || ""}
+                              <b>{t('device')}:</b> {latest.device?.platform || ""}
                             </div>
                           </>
                         ) : (
-                          <div className="muted small">No logs yet.</div>
+                          <div className="muted small">{t('noLogs')}</div>
                         )}
                       </div>
                     );
@@ -309,11 +402,11 @@ export default function AdminDashboard() {
                         <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                           <div>
                             <div style={{ fontWeight: 900 }}>
-                              {r.type === "checkin" ? "Check-in" : "Check-out"}{" "}
+                              {r.type === "checkin" ? t('checkin') : t('checkout')}{" "}
                               <span className="muted2" style={{ fontWeight: 700 }}>• {formatBangkokTime(r.time)}</span>
                             </div>
                             <div className="muted mono">lat:{Number(r.lat).toFixed(6)} lng:{Number(r.lng).toFixed(6)}</div>
-                            <div className="muted small">{r.address || "(address unavailable)"}</div>
+                            <div className="muted small">{r.address || t('addressUnavailable')}</div>
                           </div>
                           <div className="muted2 small" style={{ textAlign: "right" }}>
                             <div className="mono">{r.device?.platform || ""}</div>

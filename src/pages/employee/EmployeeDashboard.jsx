@@ -6,6 +6,7 @@ import { getSession, getUsers } from "../../services/storage";
 import { createAttendance } from "../../services/attendance";
 import { getUserAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
+import { useLanguage } from "../../context/LanguageContext";
 import LocationMap from "../../ui/LocationMap";
 
 import { formatBangkokTime } from "../../utils/date";
@@ -13,6 +14,7 @@ import { formatBangkokTime } from "../../utils/date";
 export default function EmployeeDashboard() {
   const nav = useNavigate();
   const session = getSession();
+  const { t } = useLanguage();
 
   // Get user info from session (userId is the email)
   const me = useMemo(() => {
@@ -80,33 +82,33 @@ export default function EmployeeDashboard() {
     <main className="page">
       <section className="grid">
         <Card
-          title={`Hello, ${me?.name || "Employee"}`}
+          title={`${t('hello')}, ${me?.name || "Employee"}`}
           subtitle={me ? `${me.email}${me.phone ? " • " + me.phone : ""}` : ""}
           right={
             <span className="pill">
               <span className="dot" style={{ background: status.status === "Working" ? "var(--ok)" : "#cbd5e1" }} />
-              <span>{status.status}</span>
+              <span>{status.status === "Working" ? t('statusWorking') : t('statusNotWorking')}</span>
             </span>
           }
         >
           <div className="row">
-            <button className="btn btnOk" disabled={busy} onClick={() => doAction("checkin")}>Check-in</button>
-            <button className="btn btnDanger" disabled={busy} onClick={() => doAction("checkout")}>Check-out</button>
+            <button className="btn btnOk" disabled={busy} onClick={() => doAction("checkin")}>{t('checkin')}</button>
+            <button className="btn btnDanger" disabled={busy} onClick={() => doAction("checkout")}>{t('checkout')}</button>
           </div>
 
           <div className="hr" />
 
-          <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>Recent Logs</h3>
+          <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('recentLogs')}</h3>
 
           <div className="list">
             {logs.length === 0 ? (
-              <div className="muted small">No logs yet. Press Check-in.</div>
+              <div className="muted small">{t('noLogs')}</div>
             ) : logs.map((r) => (
               <div className="item" key={r.id} style={{ cursor: "default" }}>
                 <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
                     <div style={{ fontWeight: 900 }}>
-                      {r.type === "checkin" ? "Check-in" : "Check-out"}{" "}
+                      {r.type === "checkin" ? t('checkin') : t('checkout')}{" "}
                       <span className="muted2" style={{ fontWeight: 700 }}>• {formatBangkokTime(r.time)}</span>
                     </div>
 
@@ -120,11 +122,11 @@ export default function EmployeeDashboard() {
                     ) : (
                       <div className="mt10">
                         <button className="btn btnGhost small" onClick={() => setShowMaps(p => ({ ...p, [r.id]: true }))}>
-                          Show Map
+                          {t('showMap')}
                         </button>
                       </div>
                     )}
-                    <div className="muted small" style={{ marginTop: 8 }}>{r.address || "(address unavailable)"}</div>
+                    <div className="muted small" style={{ marginTop: 8 }}>{r.address || t('addressUnavailable')}</div>
                   </div>
                   <div className="muted2 small" style={{ textAlign: "right" }}>
                     <div className="mono">{r.device?.platform || ""}</div>
@@ -135,8 +137,8 @@ export default function EmployeeDashboard() {
           </div>
         </Card>
 
-        <Card title="Tip" subtitle="Use mobile GPS for best location accuracy.">
-          <div className="muted small">If permission is blocked, check-in/out will fail.</div>
+        <Card title={t('tipTitle')} subtitle={t('tipSubtitle')}>
+          <div className="muted small">{t('tipDescription')}</div>
         </Card>
       </section>
 

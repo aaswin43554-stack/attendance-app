@@ -1,6 +1,10 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { formatBangkokTime, parseISO, getBangkokYMD, getBangkokTimeParts } from "./utils/date";
+
 import TopNav from "./ui/TopNav";
+import AttendanceCalendar from "./ui/AttendanceCalendar";
+import { LanguageProvider } from "./context/LanguageContext";
 
 import Login from "./pages/Login";
 import EmployeeSignup from "./pages/employee/EmployeeSignup";
@@ -26,7 +30,7 @@ export default function App() {
   const session = getSession(); // ✅ read session once for TopNav
 
   return (
-    <>
+    <LanguageProvider>
       <TopNav session={session} /> {/* ✅ pass session */}
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
@@ -53,6 +57,6 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </>
+    </LanguageProvider>
   );
 }
