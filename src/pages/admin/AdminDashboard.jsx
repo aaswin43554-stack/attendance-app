@@ -5,7 +5,7 @@ import { getAllUsers, getAllAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
 import LocationMap from "../../ui/LocationMap";
 
-import { formatBangkokTime, parseISO, getBangkokYMD } from "../../utils/date";
+import { formatBangkokTime, parseISO, getBangkokYMD, getBangkokTimeParts } from "../../utils/date";
 
 import AttendanceCalendar from "../../ui/AttendanceCalendar";
 
@@ -67,18 +67,37 @@ export default function AdminDashboard() {
 
     let totalMs = 0;
     let activeStartTime = null;
+    let isLateLogin = false;
+    let isEarlyLogout = false;
+    let firstCheckin = null;
+    let lastCheckout = null;
 
     todayRecords.forEach((r) => {
       if (r.type === "checkin") {
-        activeStartTime = parseISO(r.time);
+        const time = parseISO(r.time);
+        if (!firstCheckin) {
+          firstCheckin = time;
+          const { hours, minutes } = getBangkokTimeParts(time);
+          if (hours > 10 || (hours === 10 && minutes > 0)) {
+            isLateLogin = true;
+          }
+        }
+        activeStartTime = time;
       } else if (r.type === "checkout" && activeStartTime) {
-        totalMs += parseISO(r.time) - activeStartTime;
+        const time = parseISO(r.time);
+        lastCheckout = time;
+        totalMs += time - activeStartTime;
         activeStartTime = null;
       }
     });
 
     if (activeStartTime) {
       totalMs += now - activeStartTime;
+    } else if (lastCheckout) {
+      const { hours } = getBangkokTimeParts(lastCheckout);
+      if (hours < 18) {
+        isEarlyLogout = true;
+      }
     }
 
     const hours = Math.floor(totalMs / 3600000);
@@ -88,7 +107,9 @@ export default function AdminDashboard() {
     return {
       totalTime: `${hours}h ${minutes}m ${seconds}s`,
       isActive: !!activeStartTime,
-      ms: totalMs
+      ms: totalMs,
+      isLateLogin,
+      isEarlyLogout
     };
   };
 
@@ -114,6 +135,39 @@ export default function AdminDashboard() {
     nav("/login");
   };
 
+  const downloadCSV = () => {
+    const headers = ["Name", "Email", "Date", "Time", "Type", "Address", "Platform"];
+    const rows = allRecords.map(r => {
+      const { hours, minutes, seconds } = getBangkokTimeParts(r.time);
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+      return [
+        r.userName,
+        r.userEmail || "",
+        getBangkokYMD(parseISO(r.time)),
+        timeStr,
+        r.type,
+        `"${(r.address || "").replace(/"/g, '""')}"`,
+        r.device?.platform || ""
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `attendance_export_${getBangkokYMD(new Date())}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <main className="page">
       <section className="single">
@@ -124,7 +178,8 @@ export default function AdminDashboard() {
             <div className="row">
               <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} Working</span>
               <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} Total</span>
-              <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 12 }}>Logout</button>
+              <button onClick={downloadCSV} className="btn-icon" style={{ marginLeft: 12, background: "var(--primary)", color: "white" }}>Export CSV</button>
+              <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 8 }}>Logout</button>
             </div>
           }
         >
@@ -154,6 +209,14 @@ export default function AdminDashboard() {
                             {u.name} <span className="muted2" style={{ fontWeight: 700 }}>({u.email})</span>
                           </div>
                           <div className="muted small">Last: {latestTime}</div>
+                          <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                            {calculateTodayStats(u.name).isLateLogin && (
+                              <span className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "10px", padding: "2px 6px" }}>Late Login</span>
+                            )}
+                            {calculateTodayStats(u.name).isEarlyLogout && (
+                              <span className="pill" style={{ background: "#fef3c7", color: "#92400e", fontSize: "10px", padding: "2px 6px" }}>Early Logout</span>
+                            )}
+                          </div>
                         </div>
                         <span className="pill">
                           <span className="dot" style={{ background: dotColor }} />
@@ -194,6 +257,18 @@ export default function AdminDashboard() {
                               {stats.totalTime}
                             </div>
                             {stats.isActive && <div className="muted2 small">Active Session Running...</div>}
+                            <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                              {stats.isLateLogin && (
+                                <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
+                                  ⚠️ Late Login (After 10:00)
+                                </div>
+                              )}
+                              {stats.isEarlyLogout && (
+                                <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
+                                  ⚠️ Early Logout (Before 18:00)
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div style={{ textAlign: "right" }}>
                             <span className="pill" style={{ marginBottom: 4, display: "inline-flex" }}>

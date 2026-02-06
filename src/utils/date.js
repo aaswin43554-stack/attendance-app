@@ -113,6 +113,29 @@ export function getBangkokYMD(date) {
 }
 
 /**
+ * Returns hours, minutes, and seconds for the given date in Bangkok timezone.
+ * 
+ * @param {string|Date} dateVal 
+ * @returns {{hours: number, minutes: number, seconds: number}}
+ */
+export function getBangkokTimeParts(dateVal) {
+    const date = parseISO(dateVal);
+    const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Bangkok',
+        hour: 'numeric',
+        minute: 'numeric',
+        second: 'numeric',
+        hour12: false
+    }).formatToParts(date);
+
+    return {
+        hours: parseInt(parts.find(p => p.type === 'hour').value, 10),
+        minutes: parseInt(parts.find(p => p.type === 'minute').value, 10),
+        seconds: parseInt(parts.find(p => p.type === 'second').value, 10)
+    };
+}
+
+/**
  * Gets the current time in Bangkok as an ISO string
  * @deprecated Use getNetworkTime() for more reliability
  * @returns {string} ISO string
