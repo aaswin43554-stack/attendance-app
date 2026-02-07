@@ -152,35 +152,25 @@ export default function AdminDashboard() {
     setShowSettings(false);
   };
 
-  const sendEmailAlert = (employee, type, date, time) => {
-    const subject = type === 'late' ? t('lateLoginAlertSubject') : t('earlyLogoutAlertSubject');
-    const typeLabel = type === 'late' ? t('lateLogin') : t('earlyLogout');
-    const body = t('emailAlertBody')
-      .replace('{name}', employee.name)
-      .replace('{email}', employee.email)
-      .replace('{type}', typeLabel)
-      .replace('{date}', date)
-      .replace('{time}', time);
 
-    const mailto = `mailto:aaswin43554@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = mailto;
-  };
 
   const downloadCSV = () => {
     const headers = ["Name", "Email", "Date", "Time", "Type", "Address", "Platform"];
 
-    // Create a map for quick email lookup
+    // Create a map for quick email lookup (case-insensitive keys)
     const emailMap = {};
     employees.forEach(emp => {
-      emailMap[emp.name] = emp.email;
+      if (emp.name && emp.email) {
+        emailMap[emp.name.toLowerCase()] = emp.email;
+      }
     });
 
     const rows = allRecords.map(r => {
       const { hours, minutes, seconds } = getBangkokTimeParts(r.time);
       const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
-      // Look up email from the map
-      const userEmail = emailMap[r.userName] || "";
+      // Look up email from the map (case-insensitive)
+      const userEmail = emailMap[r.userName?.toLowerCase()] || "";
 
       return [
         r.userName,
@@ -336,29 +326,15 @@ export default function AdminDashboard() {
                               {stats.isLateLogin && (
                                 <div className="column" style={{ gap: 4 }}>
                                   <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
-                                    {t('lateLoginWarning')}
+                                    {t('lateLoginWarning').replace('{time}', workStart)}
                                   </div>
-                                  <button
-                                    className="btn btnGhost small"
-                                    style={{ fontSize: 10, padding: "2px 8px" }}
-                                    onClick={() => sendEmailAlert(selected, 'late', getBangkokYMD(new Date()), stats.totalTime)}
-                                  >
-                                    📧 {t('sendEmailAlert')}
-                                  </button>
                                 </div>
                               )}
                               {stats.isEarlyLogout && (
                                 <div className="column" style={{ gap: 4 }}>
                                   <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
-                                    {t('earlyLogoutWarning')}
+                                    {t('earlyLogoutWarning').replace('{time}', workEnd)}
                                   </div>
-                                  <button
-                                    className="btn btnGhost small"
-                                    style={{ fontSize: 10, padding: "2px 8px" }}
-                                    onClick={() => sendEmailAlert(selected, 'early', getBangkokYMD(new Date()), stats.totalTime)}
-                                  >
-                                    📧 {t('sendEmailAlert')}
-                                  </button>
                                 </div>
                               )}
                             </div>

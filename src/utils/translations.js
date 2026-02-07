@@ -53,8 +53,8 @@ export const translations = {
         selectEmployee: "Select an employee to view latest location and logs.",
         todayWorkingHours: "Today's Working Hours",
         activeSession: "Active Session Running...",
-        lateLoginWarning: "⚠️ Late Login (After 10:00)",
-        earlyLogoutWarning: "⚠️ Early Logout (Before 18:00)",
+        lateLoginWarning: "⚠️ Late Login (After {time})",
+        earlyLogoutWarning: "⚠️ Early Logout (Before {time})",
         latest: "Latest",
         device: "Device",
 
@@ -124,8 +124,8 @@ export const translations = {
         selectEmployee: "เลือกพนักงานเพื่อดูตำแหน่งและบันทึกล่าสุด",
         todayWorkingHours: "ชั่วโมงการทำงานวันนี้",
         activeSession: "กำลังทำงานอยู่...",
-        lateLoginWarning: "⚠️ เข้างานสาย (หลัง 10:00)",
-        earlyLogoutWarning: "⚠️ ออกงานก่อนเวลา (ก่อน 18:00)",
+        lateLoginWarning: "⚠️ เข้างานสาย (หลัง {time})",
+        earlyLogoutWarning: "⚠️ ออกงานก่อนเวลา (ก่อน {time})",
         latest: "ล่าสุด",
         device: "อุปกรณ์",
 
