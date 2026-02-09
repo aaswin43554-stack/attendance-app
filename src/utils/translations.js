@@ -144,5 +144,79 @@ export const translations = {
         emailAlertBody: "พนักงาน {name} ({email}) ได้ {type} เมื่อวันที่ {date} เวลา {time}",
         selectEmployeeLabel: "ตั้งค่าเวลาเข้างานสำหรับ:",
         defaultSettings: "พนักงานทุกคน (ค่าเริ่มต้น)"
+    },
+    la: {
+        // TopNav
+        logout: "ອອກຈາກລະບົບ",
+        login: "ເຂົ້າສູ່ລະບົບ",
+        brand: "tronXlabs",
+        beta: "ລະບົບບັນທຶກເວລາ (Beta)",
+
+        // Login Page
+        loginTitle: "ເຂົ້າສູ່ລະບົບ",
+        loginSubtitle: "ລົງຊື່ເຂົ້າໃຊ້ເພື່ອເຂົ້າສູ່ແດຊບອດຂອງທ່ານ",
+        email: "ອີເມວ",
+        password: "ລະຫັດຜ່ານ",
+        signIn: "ກຳລັງເຂົ້າສູ່ລະບົບ...",
+        loginBtn: "ເຂົ້າສູ່ລະບົບ",
+        newEmployee: "ພະນັກງານໃໝ່?",
+        createAccount: "ສ້າງບັນຊີ",
+        portalTitle: "ລະບົບລົງເວລາເຂົ້າວຽກ",
+        portalSubtitle: "ພອດທັນດຽວສຳລັບທຸກຄົນ",
+        portalPoint1: "ພະນັກງານສາມາດລົງເວລາເຂົ້າວຽກ ແລະ ເບິ່ງປະຫວັດໄດ້",
+        portalPoint2: "ຜູ້ດູແລສາມາດກວດສອບສະຖານະ ແລະ ຕຳແໜ່ງຂອງທີມໄດ້",
+        portalPoint3: "ການຕິດຕາມທີ່ປອດໄພ ແລະ ອັດຕະໂນມັດ",
+
+        // Employee Dashboard
+        hello: "ສະບາຍດີ",
+        statusWorking: "ກຳລັງເຮັດວຽກ",
+        statusNotWorking: "ບໍ່ໄດ້ເຮັດວຽກ",
+        checkin: "ລົງຊື່ເຂົ້າວຽກ",
+        checkout: "ລົງຊື່ອກວຽກ",
+        recentLogs: "ບັນທຶກຫຼ້າສຸດ",
+        noLogs: "ຍັງບໍ່ມີບັນທຶກ ເທື່ອ ກະລຸນາກົດລົງຊື່ເຂົ້າວຽກ",
+        showMap: "ສະແດງແຜນທີ່",
+        addressUnavailable: "(ບໍ່ສາມາດລະບຸທີ່ຢູ່ໄດ້)",
+        tipTitle: "ຄຳແນະນຳ",
+        tipSubtitle: "ໃຊ້ GPS ມືຖືເພື່ອຄວາມຊັດເຈນຂອງຕຳແໜ່ງທີ່ດີທີ່ສຸດ",
+        tipDescription: "ຫາກການອະນຸຍາດຖືກບລັອກ ການລົງຊື່ເຂົ້າ/ອອກຈະຫຼົ້ມເຫຼວ",
+        toastCheckedIn: "ລົງຊື່ເຂົ້າວຽກສຳເລັດ",
+        toastCheckedOut: "ລົງຊື່ອກວຽກສຳເລັດ",
+
+        // Admin Dashboard
+        adminDashboard: "ແດຊບອດຜູ້ດູແລລະບົບ",
+        adminSubtitle: "ຄລິກທີ່ພະນັກງານເພື່ອເບິ່ງລາຍລະອຽດ ຄລິກອີກຄັ້ງເພື່ອຫຍໍ້",
+        working: "ກຳລັງເຮັດວຽກ",
+        total: "ທັງໝົດ",
+        exportCSV: "ສົ່ງອອກ CSV",
+        employees: "ພະນັກງານ",
+        loadingEmployees: "ກຳລັງໂຫລດຂໍ້ມູນພະນັກງານ...",
+        noEmployees: "ຍັງບໍ່ມີພະນັກງານ",
+        last: "ຫຼ້າສຸດ",
+        lateLogin: "ເຂົ້າວຽກຊ້າ",
+        earlyLogout: "ອອກວຽກກ່ອນເວລາ",
+        details: "ລາຍລະອຽດ",
+        selectEmployee: "ເລືອກພະນັກງານເພື່ອເບິ່ງຕຳແໜ່ງ ແລະ ບັນທຶກຫຼ້າສຸດ",
+        todayWorkingHours: "ຊົ່ວໂມງການເຮັດວຽກມື້ນີ້",
+        activeSession: "ກຳລັງເຮັດວຽກຢູ່...",
+        lateLoginWarning: "⚠️ ເຂົ້າວຽກຊ້າ (ຫຼັງ {time})",
+        earlyLogoutWarning: "⚠️ ອອກວຽກກ່ອນເວລາ (ກ່ອນ {time})",
+        latest: "ຫຼ້າສຸດ",
+        device: "ອຸປະກອນ",
+
+        // Settings / Language
+        settings: "ການຕັ້ງຄ່າ",
+        language: "ພາສາ",
+        workStartTime: "ເວລາເລີ່ມວຽກ",
+        workEndTime: "ເວລາເລີກວຽກ",
+        saveSettings: "ບັນທຶກການຕັ້ງຄ່າ",
+        settingsSaved: "ບັນທຶກການຕັ້ງຄ່າສຳເລັດ!",
+        sendEmailAlert: "ສົ່ງອີເມວແຈ້ງເຕືອນ",
+        lateLoginAlertSubject: "ແຈ້ງເຕືອນ: ເຂົ້າວຽກຊ້າ",
+        earlyLogoutAlertSubject: "ແຈ້ງເຕືອນ: ອອກວຽກກ່ອນເວລາ",
+        emailAlertBody: "ພະນັກງານ {name} ({email}) ໄດ້ {type} ເມື່ອວັນທີ {date} ເວລາ {time}",
+        selectEmployeeLabel: "ຕັ້ງຄ່າເວລາເຂົ້າວຽກສຳລັບ:",
+        defaultSettings: "ພະນັກງານທຸກຄົນ (ຄ່າເລີ່ມຕົ້ນ)"
     }
 };
+

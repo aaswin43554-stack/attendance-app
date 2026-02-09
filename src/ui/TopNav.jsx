@@ -64,6 +64,12 @@ export default function TopNav() {
                 >
                   ไทย
                 </div>
+                <div
+                  className={"item " + (lang === 'la' ? 'active' : '')}
+                  onClick={() => { setLang('la'); setIsLangOpen(false); }}
+                >
+                  ລາວ
+                </div>
               </div>
             )}
           </div>
