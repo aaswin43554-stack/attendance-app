@@ -17,13 +17,36 @@ export default function AdminDashboard() {
   const [allRecords, setAllRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
+  const { t } = useLanguage();
 
-  // Work hours settings
-  const [workStart, setWorkStart] = useState(() => localStorage.getItem("work_start") || "10:00");
-  const [workEnd, setWorkEnd] = useState(() => localStorage.getItem("work_end") || "18:00");
+  // Work hours settings: store as an object { "default": { start, end }, "Employee Name": { start, end } }
+  const [workSettings, setWorkSettings] = useState(() => {
+    try {
+      const saved = localStorage.getItem("work_settings_v2");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error("Failed to parse work settings:", e);
+    }
+    // Fallback to old keys if available, otherwise default
+    return {
+      default: {
+        start: localStorage.getItem("work_start") || "10:00",
+        end: localStorage.getItem("work_end") || "18:00"
+      }
+    };
+  });
+
+  const [settingsTarget, setSettingsTarget] = useState("default");
+  const [tempStart, setTempStart] = useState("");
+  const [tempEnd, setTempEnd] = useState("");
   const [showSettings, setShowSettings] = useState(false);
 
-  const { t } = useLanguage();
+  // Sync temp inputs when selection changes
+  useEffect(() => {
+    const config = workSettings[settingsTarget] || workSettings["default"];
+    setTempStart(config.start);
+    setTempEnd(config.end);
+  }, [settingsTarget, workSettings]);
 
   useEffect(() => {
     async function fetchData() {
@@ -80,13 +103,16 @@ export default function AdminDashboard() {
     let firstCheckin = null;
     let lastCheckout = null;
 
+    const config = workSettings[userName] || workSettings["default"];
+    const { start: limitStart, end: limitEnd } = config;
+
     todayRecords.forEach((r) => {
       if (r.type === "checkin") {
         const time = parseISO(r.time);
         if (!firstCheckin) {
           firstCheckin = time;
           const { hours, minutes } = getBangkokTimeParts(time);
-          const [limitH, limitM] = workStart.split(":").map(Number);
+          const [limitH, limitM] = limitStart.split(":").map(Number);
           if (hours > limitH || (hours === limitH && minutes > limitM)) {
             isLateLogin = true;
           }
@@ -104,7 +130,7 @@ export default function AdminDashboard() {
       totalMs += now - activeStartTime;
     } else if (lastCheckout) {
       const { hours, minutes } = getBangkokTimeParts(lastCheckout);
-      const [limitH, limitM] = workEnd.split(":").map(Number);
+      const [limitH, limitM] = limitEnd.split(":").map(Number);
       if (hours < limitH || (hours === limitH && minutes < limitM)) {
         isEarlyLogout = true;
       }
@@ -119,7 +145,9 @@ export default function AdminDashboard() {
       isActive: !!activeStartTime,
       ms: totalMs,
       isLateLogin,
-      isEarlyLogout
+      isEarlyLogout,
+      limitStart,
+      limitEnd
     };
   };
 
@@ -146,8 +174,12 @@ export default function AdminDashboard() {
   };
 
   const saveWorkSettings = () => {
-    localStorage.setItem("work_start", workStart);
-    localStorage.setItem("work_end", workEnd);
+    const updated = {
+      ...workSettings,
+      [settingsTarget]: { start: tempStart, end: tempEnd }
+    };
+    setWorkSettings(updated);
+    localStorage.setItem("work_settings_v2", JSON.stringify(updated));
     alert(t('settingsSaved'));
     setShowSettings(false);
   };
@@ -224,21 +256,37 @@ export default function AdminDashboard() {
           {showSettings && (
             <div className="item" style={{ marginBottom: 20, borderTop: "2px solid var(--primary)" }}>
               <h3 className="title">{t('settings')}</h3>
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>{t('selectEmployeeLabel')}</label>
+                <select
+                  className="input"
+                  value={settingsTarget}
+                  onChange={(e) => setSettingsTarget(e.target.value)}
+                  style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ddd" }}
+                >
+                  <option value="default">{t('defaultSettings')}</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.name}>{emp.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid2" style={{ gap: 20 }}>
                 <div>
                   <label>{t('workStartTime')}</label>
                   <input
                     type="time"
-                    value={workStart}
-                    onChange={e => setWorkStart(e.target.value)}
+                    value={tempStart}
+                    onChange={e => setTempStart(e.target.value)}
                   />
                 </div>
                 <div>
                   <label>{t('workEndTime')}</label>
                   <input
                     type="time"
-                    value={workEnd}
-                    onChange={e => setWorkEnd(e.target.value)}
+                    value={tempEnd}
+                    onChange={e => setTempEnd(e.target.value)}
                   />
                 </div>
               </div>
@@ -326,14 +374,14 @@ export default function AdminDashboard() {
                               {stats.isLateLogin && (
                                 <div className="column" style={{ gap: 4 }}>
                                   <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
-                                    {t('lateLoginWarning').replace('{time}', workStart)}
+                                    {t('lateLoginWarning').replace('{time}', stats.limitStart)}
                                   </div>
                                 </div>
                               )}
                               {stats.isEarlyLogout && (
                                 <div className="column" style={{ gap: 4 }}>
                                   <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
-                                    {t('earlyLogoutWarning').replace('{time}', workEnd)}
+                                    {t('earlyLogoutWarning').replace('{time}', stats.limitEnd)}
                                   </div>
                                 </div>
                               )}

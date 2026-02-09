@@ -68,7 +68,9 @@ export const translations = {
         sendEmailAlert: "Send Email Alert",
         lateLoginAlertSubject: "Attendance Alert: Late Login",
         earlyLogoutAlertSubject: "Attendance Alert: Early Logout",
-        emailAlertBody: "Employee {name} ({email}) was {type} on {date} at {time}."
+        emailAlertBody: "Employee {name} ({email}) was {type} on {date} at {time}.",
+        selectEmployeeLabel: "Set work time for:",
+        defaultSettings: "All Employees (Default)"
     },
     th: {
         // TopNav
@@ -139,6 +141,8 @@ export const translations = {
         sendEmailAlert: "ส่งอีเมลแจ้งเตือน",
         lateLoginAlertSubject: "แจ้งเตือน: เข้างานสาย",
         earlyLogoutAlertSubject: "แจ้งเตือน: ออกงานก่อนเวลา",
-        emailAlertBody: "พนักงาน {name} ({email}) ได้ {type} เมื่อวันที่ {date} เวลา {time}"
+        emailAlertBody: "พนักงาน {name} ({email}) ได้ {type} เมื่อวันที่ {date} เวลา {time}",
+        selectEmployeeLabel: "ตั้งค่าเวลาเข้างานสำหรับ:",
+        defaultSettings: "พนักงานทุกคน (ค่าเริ่มต้น)"
     }
 };
