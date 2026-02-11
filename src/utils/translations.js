@@ -70,7 +70,25 @@ export const translations = {
         earlyLogoutAlertSubject: "Attendance Alert: Early Logout",
         emailAlertBody: "Employee {name} ({email}) was {type} on {date} at {time}.",
         selectEmployeeLabel: "Set work time for:",
-        defaultSettings: "All Employees (Default)"
+        defaultSettings: "All Employees (Default)",
+
+        // Signup Page
+        signupTitle: "Employee Signup",
+        signupSubtitle: "Create your account (beta). No role selection.",
+        fullName: "Full Name",
+        fullNamePlaceholder: "e.g., Aswin S",
+        phoneOptional: "Phone (optional)",
+        phonePlaceholder: "e.g., 9xxxxxxxxx",
+        passwordPlaceholder: "Create a password",
+        creating: "Creating...",
+        createAccountBtn: "Create Account",
+        back: "Back",
+        privacyTitle: "Privacy",
+        privacySubtitle: "Geo-tag is saved only on check-in/out for attendance verification.",
+        privacyPoint1: "Location captured only when you press a button.",
+        privacyPoint2: "Address may be unavailable sometimes; lat/lng still records.",
+        toastSignupSuccess: "Account created. Please login.",
+        signupFailed: "Signup failed"
     },
     th: {
         // TopNav
@@ -143,7 +161,25 @@ export const translations = {
         earlyLogoutAlertSubject: "แจ้งเตือน: ออกงานก่อนเวลา",
         emailAlertBody: "พนักงาน {name} ({email}) ได้ {type} เมื่อวันที่ {date} เวลา {time}",
         selectEmployeeLabel: "ตั้งค่าเวลาเข้างานสำหรับ:",
-        defaultSettings: "พนักงานทุกคน (ค่าเริ่มต้น)"
+        defaultSettings: "พนักงานทุกคน (ค่าเริ่มต้น)",
+
+        // Signup Page
+        signupTitle: "ลงทะเบียนพนักงาน",
+        signupSubtitle: "สร้างบัญชีของคุณ (เบต้า) ไม่ต้องเลือกบทบาท",
+        fullName: "ชื่อ-นามสกุล",
+        fullNamePlaceholder: "เช่น อัศวิน เอส",
+        phoneOptional: "เบอร์โทรศัพท์ (ไม่บังคับ)",
+        phonePlaceholder: "เช่น 09xxxxxxxxx",
+        passwordPlaceholder: "สร้างรหัสผ่าน",
+        creating: "กำลังสร้าง...",
+        createAccountBtn: "สร้างบัญชี",
+        back: "กลับ",
+        privacyTitle: "ความเป็นส่วนตัว",
+        privacySubtitle: "บันทึกแท็กพิกัดเฉพาะเมื่อลงชื่อเข้า/ออกเพื่อตรวจสอบการเข้างาน",
+        privacyPoint1: "บันทึกตำแหน่งเฉพาะเมื่อคุณกดปุ่มเท่านั้น",
+        privacyPoint2: "ที่อยู่อาจไม่พร้อมใช้งานในบางครั้ง แต่พิกัดละติจูด/ลองจิจูดยังคงถูกบันทึก",
+        toastSignupSuccess: "สร้างบัญชีสำเร็จ กรุณาเข้าสู่ระบบ",
+        signupFailed: "การลงทะเบียนล้มเหลว"
     },
     la: {
         // TopNav
@@ -216,7 +252,25 @@ export const translations = {
         earlyLogoutAlertSubject: "ແຈ້ງເຕືອນ: ອອກວຽກກ່ອນເວລາ",
         emailAlertBody: "ພະນັກງານ {name} ({email}) ໄດ້ {type} ເມື່ອວັນທີ {date} ເວລາ {time}",
         selectEmployeeLabel: "ຕັ້ງຄ່າເວລາເຂົ້າວຽກສຳລັບ:",
-        defaultSettings: "ພະນັກງານທຸກຄົນ (ຄ່າເລີ່ມຕົ້ນ)"
+        defaultSettings: "ພະນັກງານທຸກຄົນ (ຄ່າເລີ່ມຕົ້ນ)",
+
+        // Signup Page
+        signupTitle: "ລົງທະບຽນພະນັກງານ",
+        signupSubtitle: "ສ້າງບັນຊີຂອງທ່ານ (ເບຕ້າ) ບໍ່ຕ້ອງເລືອກບົດບາດ",
+        fullName: "ຊື່ ແລະ ນາມສະກຸນ",
+        fullNamePlaceholder: "ຕົວຢ່າງ: Aswin S",
+        phoneOptional: "ເບີໂທລະສັບ (ທາງເລືອກ)",
+        phonePlaceholder: "ຕົວຢ່າງ: 020xxxxxxxx",
+        passwordPlaceholder: "ສ້າງລະຫັດຜ່ານ",
+        creating: "ກຳລັງສ້າງ...",
+        createAccountBtn: "ສ້າງບັນຊີ",
+        back: "ກັບຄືນ",
+        privacyTitle: "ຄວາມເປັນສ່ວນຕົວ",
+        privacySubtitle: "ບັນທຶກແທັກພິກັດສະເພາະເມື່ອລົງຊື່ເຂົ້າ/ອອກເພື່ອທົດສອບການເຂົ້າວຽກ",
+        privacyPoint1: "ບັນທຶກຕຳແໜ່ງສະເພາະເມື່ອທ່ານກົດປຸ່ມເທົ່ານັ້ນ",
+        privacyPoint2: "ທີ່ຢູ່ອາດບໍ່ພ້ອມໃຊ້ງານໃນບາງຄັ້ງ ແຕ່ພິກັດລະຕິຈຸດ/ລອງຈິຈຸດຍັງຄົງຖືກບັນທຶກ",
+        toastSignupSuccess: "ສ້າງບັນຊີສຳເລັດ ກະລຸນາເຂົ້າສູ່ລະບົບ",
+        signupFailed: "ການລົງທະບຽນຫຼົ້ມເຫຼວ"
     }
 };
 

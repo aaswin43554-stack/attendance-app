@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../ui/Card";
 import Toast from "../../ui/Toast";
 import { signupEmployee } from "../../services/auth";
+import { useLanguage } from "../../context/LanguageContext";
 
 export default function EmployeeSignup() {
   const nav = useNavigate();
@@ -12,18 +13,19 @@ export default function EmployeeSignup() {
   const [pass, setPass] = useState("");
   const [toast, setToast] = useState("");
   const [loading, setLoading] = useState(false);
+  const { t } = useLanguage();
 
   const onSignup = async () => {
     try {
       setLoading(true);
       await signupEmployee({ name, phone, email, pass });
-      setToast("Account created. Please login.");
+      setToast(t('toastSignupSuccess'));
       setTimeout(() => {
         setToast("");
         nav("/login");
       }, 1200);
     } catch (e) {
-      setToast(e.message || "Signup failed");
+      setToast(e.message || t('signupFailed'));
       setTimeout(() => setToast(""), 2200);
     } finally {
       setLoading(false);
@@ -34,8 +36,8 @@ export default function EmployeeSignup() {
     <main className="page">
       <section className="grid">
         <Card
-          title="Employee Signup"
-          subtitle="Create your account (beta). No role selection."
+          title={t('signupTitle')}
+          subtitle={t('signupSubtitle')}
         >
           <form
             onSubmit={(e) => {
@@ -46,12 +48,12 @@ export default function EmployeeSignup() {
           >
             <div className="grid2">
               <div>
-                <label>Full Name</label>
+                <label>{t('fullName')}</label>
                 <input
                   name="emp_signup_name_x"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g., Aswin S"
+                  placeholder={t('fullNamePlaceholder')}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="words"
@@ -60,12 +62,12 @@ export default function EmployeeSignup() {
               </div>
 
               <div>
-                <label>Phone (optional)</label>
+                <label>{t('phoneOptional')}</label>
                 <input
                   name="emp_signup_phone_x"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="e.g., 9xxxxxxxxx"
+                  placeholder={t('phonePlaceholder')}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="none"
@@ -76,7 +78,7 @@ export default function EmployeeSignup() {
 
             <div className="grid2 mt10">
               <div>
-                <label>Email</label>
+                <label>{t('email')}</label>
                 <input
                   name="emp_signup_email_x"
                   value={email}
@@ -90,13 +92,13 @@ export default function EmployeeSignup() {
               </div>
 
               <div>
-                <label>Password</label>
+                <label>{t('password')}</label>
                 <input
                   name="emp_signup_pass_x"
                   type="password"
                   value={pass}
                   onChange={(e) => setPass(e.target.value)}
-                  placeholder="Create a password"
+                  placeholder={t('passwordPlaceholder')}
                   autoComplete="new-password"
                   autoCorrect="off"
                   autoCapitalize="none"
@@ -107,7 +109,7 @@ export default function EmployeeSignup() {
 
             <div className="row mt12">
               <button className="btn btnPrimary" type="submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Account"}
+                {loading ? t('creating') : t('createAccountBtn')}
               </button>
               <button
                 className="btn btnGhost"
@@ -115,20 +117,20 @@ export default function EmployeeSignup() {
                 onClick={() => nav("/login")}
                 disabled={loading}
               >
-                Back
+                {t('back')}
               </button>
             </div>
           </form>
         </Card>
 
         <Card
-          title="Privacy"
-          subtitle="Geo-tag is saved only on check-in/out for attendance verification."
+          title={t('privacyTitle')}
+          subtitle={t('privacySubtitle')}
         >
           <div className="muted small" style={{ lineHeight: 1.7 }}>
-            • Location captured only when you press a button.
+            • {t('privacyPoint1')}
             <br />
-            • Address may be unavailable sometimes; lat/lng still records.
+            • {t('privacyPoint2')}
           </div>
         </Card>
       </section>
