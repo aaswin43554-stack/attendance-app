@@ -11,6 +11,7 @@ import EmployeeSignup from "./pages/employee/EmployeeSignup";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ForgotPassword from "./pages/ForgotPassword";
 
 import { getSession } from "./services/storage";
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/employee/signup" element={<EmployeeSignup />} />
         <Route
           path="/employee/dashboard"

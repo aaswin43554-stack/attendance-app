@@ -167,11 +167,33 @@ export async function getUserByEmail(email) {
   }
 }
 
+/**
+ * Update user password
+ */
+export async function updateUserPassword(email, newPassword) {
+  try {
+    console.log("🔐 Updating password for:", email);
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({ password: newPassword })
+      .eq("email", email.toLowerCase());
+
+    if (error) {
+      console.error("❌ Error updating password:", error);
+      throw error;
+    }
+
+    console.log("✅ Password updated successfully");
+    return true;
+  } catch (error) {
+    console.error("❌ Error updating user password:", error);
+    throw error;
+  }
+}
+
 // ============ ATTENDANCE TRACKING ============
 
-/**
- * Record attendance (check-in or check-out) to Supabase
- */
 export async function recordAttendance(attendanceRecord) {
   try {
     console.log("📤 Sending to Supabase:", attendanceRecord);
@@ -195,19 +217,45 @@ export async function recordAttendance(attendanceRecord) {
 }
 
 /**
+ * Record multiple attendance records in a single batch
+ */
+export async function recordBatchAttendance(records) {
+  try {
+    console.log(`📤 Sending batch of ${records.length} to Supabase...`);
+    const { data, error } = await supabase
+      .from("attendance")
+      .insert(records);
+
+    if (error) {
+      console.error("❌ Supabase Batch Error:", error);
+      throw error;
+    }
+
+    console.log("✅ Successfully saved batch to Supabase");
+    return true;
+  } catch (error) {
+    console.error("❌ Error recording batch attendance:", error.message);
+    throw new Error("Failed to record batch attendance: " + error.message);
+  }
+}
+
+/**
  * Get all attendance records for a user from Supabase
  */
 export async function getUserAttendanceRecords(userName) {
   try {
+    // Fetch records for the user OR workers managed by the user
     const { data, error } = await supabase
       .from("attendance")
       .select("*")
-      .eq("userName", userName)
+      .or(`userName.eq."${userName}",userName.ilike."Worker % (via ${userName})%"`)
       .order("time", { ascending: false });
 
     if (error) throw error;
     return (data || []).map(r => ({
       ...r,
+      // If userId is missing (old records or worker records), try to derive it or use a default
+      userId: r.userId || (r.userName.includes(" (via ") ? r.userName.replace(/\s+/g, '_') : userName),
       device: typeof r.device === 'string' ? JSON.parse(r.device) : r.device
     }));
   } catch (error) {

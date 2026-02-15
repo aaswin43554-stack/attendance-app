@@ -1,6 +1,6 @@
 import { getAttendance, setAttendance } from "./storage";
 import { getCurrentPosition, reverseGeocode, deviceInfo } from "./geo";
-import { recordAttendance, getUserAttendanceRecords } from "./supabase";
+import { recordAttendance, getUserAttendanceRecords, recordBatchAttendance } from "./supabase";
 import { getNetworkTime } from "../utils/date";
 
 export async function latestStatusFor(userName) {
@@ -64,5 +64,55 @@ export async function createAttendance({ userId, type, userName }) {
   } catch (error) {
     console.error("⚠️ Could not save to Supabase:", error.message);
     // Still saved to localStorage, so continue
+  }
+}
+
+export async function createBatchAttendance({ userId, type, userName, workerIds }) {
+  const pos = await getCurrentPosition();
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  const address = await reverseGeocode(lat, lng);
+  const time = await getNetworkTime();
+  const device = deviceInfo();
+
+  const records = workerIds.map(workerId => ({
+    id: "a_" + Math.random().toString(16).slice(2) + Date.now().toString(16),
+    userId: userId + "_worker_" + workerId,
+    userName: `Worker ${workerId} (via ${userName})`,
+    type,
+    time,
+    lat,
+    lng,
+    address,
+    device: JSON.stringify(device),
+  }));
+
+  // Save to localStorage (individual entries)
+  const rows = getAttendance();
+  records.forEach(r => {
+    rows.push({
+      ...r,
+      device: JSON.parse(r.device)
+    });
+  });
+  setAttendance(rows);
+
+  // Bulk save to Supabase
+  try {
+    // Only send columns that Supabase expects
+    const supabaseRecords = records.map(r => ({
+      id: r.id,
+      userName: r.userName,
+      type: r.type,
+      time: r.time,
+      lat: r.lat,
+      lng: r.lng,
+      address: r.address,
+      device: r.device
+    }));
+    await recordBatchAttendance(supabaseRecords);
+    console.log(`✅ Batch of ${supabaseRecords.length} saved successfully!`);
+  } catch (error) {
+    console.error("⚠️ Could not save batch to Supabase:", error.message);
   }
 }

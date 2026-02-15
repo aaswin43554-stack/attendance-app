@@ -60,7 +60,20 @@ export default function AdminDashboard() {
           .filter((u) => u.role === "employee")
           .sort((a, b) => a.name.localeCompare(b.name));
 
-        setEmployees(employeesList);
+        // Extract virtual workers from attendance records
+        const workerNames = [...new Set(records
+          .filter(r => r.userName && r.userName.startsWith("Worker "))
+          .map(r => r.userName))];
+
+        const virtualWorkers = workerNames.map(name => ({
+          id: "worker_" + name.replace(/\s+/g, '_'),
+          name: name,
+          email: "Worker",
+          role: "worker",
+          isVirtual: true
+        })).sort((a, b) => a.name.localeCompare(b.name));
+
+        setEmployees([...employeesList, ...virtualWorkers]);
         setAllRecords(records);
       } catch (error) {
         console.error("Failed to fetch data:", error);
@@ -187,13 +200,14 @@ export default function AdminDashboard() {
 
 
   const downloadCSV = () => {
-    const headers = ["Name", "Email", "Date", "Time", "Type", "Address", "Platform"];
-
-    // Create a map for quick email lookup (case-insensitive keys)
+    const headers = ["Name", "Email", "Phone", "Date", "Time", "Type", "Address", "Platform"];
+    // Create maps for quick lookup (case-insensitive keys)
     const emailMap = {};
+    const phoneMap = {};
     employees.forEach(emp => {
-      if (emp.name && emp.email) {
-        emailMap[emp.name.toLowerCase()] = emp.email;
+      if (emp.name) {
+        if (emp.email) emailMap[emp.name.toLowerCase()] = emp.email;
+        if (emp.phone) phoneMap[emp.name.toLowerCase()] = emp.phone;
       }
     });
 
@@ -201,12 +215,14 @@ export default function AdminDashboard() {
       const { hours, minutes, seconds } = getBangkokTimeParts(r.time);
       const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
-      // Look up email from the map (case-insensitive)
+      // Look up info from the maps (case-insensitive)
       const userEmail = emailMap[r.userName?.toLowerCase()] || "";
+      const userPhone = phoneMap[r.userName?.toLowerCase()] || "";
 
       return [
         r.userName,
         userEmail,
+        userPhone,
         getBangkokYMD(parseISO(r.time)),
         timeStr,
         r.type,

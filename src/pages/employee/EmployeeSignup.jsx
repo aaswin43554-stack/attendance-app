@@ -62,7 +62,7 @@ export default function EmployeeSignup() {
               </div>
 
               <div>
-                <label>{t('phoneOptional')}</label>
+                <label>{t('phoneNumber') || 'Phone Number'}</label>
                 <input
                   name="emp_signup_phone_x"
                   value={phone}
@@ -72,6 +72,7 @@ export default function EmployeeSignup() {
                   autoCorrect="off"
                   autoCapitalize="none"
                   spellCheck={false}
+                  required
                 />
               </div>
             </div>

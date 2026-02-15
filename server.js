@@ -66,6 +66,58 @@ app.post("/api/sheets", async (req, res) => {
   }
 });
 
+/**
+ * Proxy endpoint for notifications (Email/SMS)
+ * POST /api/notify
+ */
+app.post("/api/notify", async (req, res) => {
+  try {
+    const { action, email, phone, name, password } = req.body;
+
+    if (action === "resetPassword") {
+      // Forward to Google Apps Script for Email
+      if (GOOGLE_SHEETS_API_URL) {
+        await fetch(GOOGLE_SHEETS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "sendResetEmail",
+            email,
+            name,
+            password,
+          }),
+        });
+      }
+
+      // Placeholder for SMS/n8n/Twilio
+      console.log(`[NOTIFY] Password reset sent to ${email} and ${phone}`);
+
+      return res.json({ success: true, message: "Reset instructions sent." });
+    }
+
+    res.status(400).json({ error: "Invalid notify action" });
+  } catch (error) {
+    console.error("Notification error:", error);
+    res.status(500).json({ error: "Failed to send notification" });
+  }
+});
+
+/**
+ * OTP endpoint
+ * POST /api/otp
+ */
+app.post("/api/otp", async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+    console.log(`[OTP] Sending OTP to ${phone} for ${email}`);
+    // Future: Integrate Twilio or n8n here
+    res.json({ success: true, message: "OTP sent successfully" });
+  } catch (error) {
+    console.error("OTP Error:", error);
+    res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
 // ✅ Serve Vite build output (dist)
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));

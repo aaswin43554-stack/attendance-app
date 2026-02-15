@@ -77,19 +77,32 @@ export default function Login() {
 
                         <div className="row mt12">
                             <button className="btn btnPrimary" type="submit" disabled={loading}>
-                                {loading ? t('signIn') : t('loginBtn')}
+                                {loading ? t('loggingIn') : t('loginBtn')}
+                            </button>
+                            <button
+                                className="btn btnGhost"
+                                type="button"
+                                onClick={() => nav("/employee/signup")}
+                                disabled={loading}
+                            >
+                                {t('createAccountBtn')}
+                            </button>
+                        </div>
+                        <div className="center mt10">
+                            <button
+                                className="btn btnText"
+                                type="button"
+                                onClick={() => nav("/forgot-password")}
+                                style={{ fontSize: '0.85rem' }}
+                            >
+                                {t('forgotPassword') || 'Forgot Password?'}
                             </button>
                         </div>
                     </form>
 
                     <div className="hr" />
 
-                    <div className="muted small">
-                        {t('newEmployee')}{" "}
-                        <button className="linkBtn" onClick={() => nav("/employee/signup")}>
-                            {t('createAccount')}
-                        </button>
-                    </div>
+
                 </Card>
 
                 <Card
