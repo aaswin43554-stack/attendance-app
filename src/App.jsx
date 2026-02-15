@@ -11,6 +11,7 @@ import EmployeeSignup from "./pages/employee/EmployeeSignup";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import TeamLeaderDashboard from "./pages/team-leader/TeamLeaderDashboard";
 import ForgotPassword from "./pages/ForgotPassword";
 
 import { getSession } from "./services/storage";
@@ -24,6 +25,12 @@ function RequireEmployee({ children }) {
 function RequireAdmin({ children }) {
   const s = getSession();
   if (s.type !== "admin") return <Navigate to="/login" replace />;
+  return children;
+}
+
+function RequireTeamLeader({ children }) {
+  const s = getSession();
+  if (s.type !== "team_leader") return <Navigate to="/login" replace />;
   return children;
 }
 
@@ -54,6 +61,15 @@ export default function App() {
             <RequireAdmin>
               <AdminDashboard />
             </RequireAdmin>
+          }
+        />
+
+        <Route
+          path="/team-leader/dashboard"
+          element={
+            <RequireTeamLeader>
+              <TeamLeaderDashboard />
+            </RequireTeamLeader>
           }
         />
 

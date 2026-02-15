@@ -192,6 +192,62 @@ export async function updateUserPassword(email, newPassword) {
   }
 }
 
+/**
+ * Update user role
+ */
+export async function updateUserRole(email, role) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .update({ role })
+      .eq("email", email.toLowerCase());
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error("❌ Error updating role:", error);
+    throw error;
+  }
+}
+
+/**
+ * Assign employee to a team leader
+ */
+export async function assignEmployeeToLeader(employeeEmail, leaderEmail) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .update({ managed_by: leaderEmail })
+      .eq("email", employeeEmail.toLowerCase());
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error("❌ Error assigning employee:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get all employees managed by a team leader
+ */
+export async function getEmployeesByLeader(leaderEmail) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("managed_by", leaderEmail.toLowerCase())
+      .eq("role", "employee")
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("❌ Error fetching managed employees:", error);
+    throw error;
+  }
+}
+
 // ============ ATTENDANCE TRACKING ============
 
 export async function recordAttendance(attendanceRecord) {
