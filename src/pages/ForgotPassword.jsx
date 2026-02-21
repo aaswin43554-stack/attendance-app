@@ -31,7 +31,7 @@ export default function ForgotPassword() {
     const [toast, setToast] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const showToast = (msg, duration = 2500) => {
+    const showToast = (msg, duration = 3500) => {
         setToast(msg);
         setTimeout(() => setToast(""), duration);
     };
@@ -46,7 +46,7 @@ export default function ForgotPassword() {
             setUser(userData);
             setStage(2);
         } catch (err) {
-            showToast(err.message);
+            showToast(err.message || "Email lookup failed.");
         } finally {
             setLoading(false);
         }
@@ -56,11 +56,13 @@ export default function ForgotPassword() {
         if (type === 'otp') {
             try {
                 setLoading(true);
-                await sendOTP(user.email, user.phone);
-                showToast(t('otpSent'));
+                showToast("Requesting code...");
+                await sendOTP(user.email);
+                showToast(t('otpSent') || "Code sent successfully!");
                 setStage('3b');
             } catch (err) {
-                showToast(err.message || "Failed to send OTP");
+                console.error("OTP Error:", err);
+                showToast(err.message || "Failed to send OTP. Technical error.");
             } finally {
                 setLoading(false);
             }
@@ -90,7 +92,6 @@ export default function ForgotPassword() {
         e.preventDefault();
         try {
             setLoading(true);
-            // Verify the real OTP code with Supabase
             await verifyOTPCode(user.email, otp);
             setStage(4);
         } catch (err) {
@@ -108,10 +109,10 @@ export default function ForgotPassword() {
         try {
             setLoading(true);
             await updatePassword(user.email, newPass);
-            showToast(t('passUpdateSuccess'), 2000);
+            showToast(t('passUpdateSuccess') || "Password updated successfully!", 2000);
             setTimeout(() => nav("/login"), 2000);
         } catch (err) {
-            showToast(err.message);
+            showToast(err.message || "Update failed.");
         } finally {
             setLoading(false);
         }
@@ -123,7 +124,7 @@ export default function ForgotPassword() {
                 return (
                     <form onSubmit={handleStage1}>
                         <div className="item-fade">
-                            <label>{t('email')}</label>
+                            <label>{t('email') || "Email"}</label>
                             <input
                                 type="email"
                                 value={email}
@@ -131,10 +132,11 @@ export default function ForgotPassword() {
                                 placeholder="you@example.com"
                                 className="input-premium"
                                 required
+                                disabled={loading}
                             />
                             <div className="row mt20">
                                 <button className="btn btnPrimary w100" type="submit" disabled={loading}>
-                                    {loading ? t('searching') : t('resetPasswordBtn')}
+                                    {loading ? (t('searching') || "Searching...") : (t('resetPasswordBtn') || "Reset Password")}
                                 </button>
                             </div>
                         </div>
@@ -143,11 +145,12 @@ export default function ForgotPassword() {
             case 2:
                 return (
                     <div className="item-fade column" style={{ gap: 12 }}>
-                        <button className="btn btnOutline w100" onClick={() => handleChoice('pass')}>
-                            {t('lastPasswordVerify')}
+                        <button className="btn btnOutline w100" onClick={() => handleChoice('pass')} disabled={loading}>
+                            {t('lastPasswordVerify') || "Verify with Last Password"}
                         </button>
-                        <button className="btn btnOutline w100" onClick={() => handleChoice('otp')}>
-                            📧 Send recovery code to email ({user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")})
+                        <button className="btn btnOutline w100" onClick={() => handleChoice('otp')} disabled={loading} style={{ position: 'relative' }}>
+                            {loading && <span style={{ position: 'absolute', left: '10px' }}>⏳</span>}
+                            📧 {loading ? "Sending..." : `Send recovery code to email (${user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")})`}
                         </button>
                     </div>
                 );
@@ -155,7 +158,7 @@ export default function ForgotPassword() {
                 return (
                     <form onSubmit={handleStage3a}>
                         <div className="item-fade">
-                            <label>{t('enterLastPassword')}</label>
+                            <label>{t('enterLastPassword') || "Enter Last Password"}</label>
                             <input
                                 type="password"
                                 value={lastPass}
@@ -163,10 +166,11 @@ export default function ForgotPassword() {
                                 placeholder="••••••••"
                                 className="input-premium"
                                 required
+                                disabled={loading}
                             />
                             <div className="row mt20">
                                 <button className="btn btnPrimary w100" type="submit" disabled={loading}>
-                                    {loading ? t('verifying') : t('verify')}
+                                    {loading ? (t('verifying') || "Verifying...") : (t('verify') || "Verify")}
                                 </button>
                             </div>
                         </div>
@@ -176,7 +180,7 @@ export default function ForgotPassword() {
                 return (
                     <form onSubmit={handleStage3b}>
                         <div className="item-fade">
-                            <label>{t('enterOtp')}</label>
+                            <label>{t('enterOtp') || "Enter OTP"}</label>
                             <input
                                 type="text"
                                 maxLength="6"
@@ -186,11 +190,12 @@ export default function ForgotPassword() {
                                 className="input-premium center mono"
                                 style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
                                 required
+                                disabled={loading}
                             />
                             <div className="muted small center mt10">Check your email for the 6-digit verification code.</div>
                             <div className="row mt20">
                                 <button className="btn btnPrimary w100" type="submit" disabled={loading}>
-                                    {t('verifyOtp')}
+                                    {loading ? "Verifying..." : (t('verifyOtp') || "Verify OTP")}
                                 </button>
                             </div>
                         </div>
@@ -201,7 +206,7 @@ export default function ForgotPassword() {
                     <form onSubmit={handleStage4}>
                         <div className="item-fade">
                             <div style={{ marginBottom: 12 }}>
-                                <label>{t('newPassword')}</label>
+                                <label>{t('newPassword') || "New Password"}</label>
                                 <input
                                     type="password"
                                     value={newPass}
@@ -209,10 +214,11 @@ export default function ForgotPassword() {
                                     placeholder="••••••••"
                                     className="input-premium"
                                     required
+                                    disabled={loading}
                                 />
                             </div>
                             <div>
-                                <label>{t('confirmNewPassword')}</label>
+                                <label>{t('confirmNewPassword') || "Confirm Password"}</label>
                                 <input
                                     type="password"
                                     value={confirmPass}
@@ -220,11 +226,12 @@ export default function ForgotPassword() {
                                     placeholder="••••••••"
                                     className="input-premium"
                                     required
+                                    disabled={loading}
                                 />
                             </div>
                             <div className="row mt20">
                                 <button className="btn btnPrimary w100" type="submit" disabled={loading}>
-                                    {loading ? t('updating') : t('updatePasswordBtn')}
+                                    {loading ? (t('updating') || "Updating...") : (t('updatePasswordBtn') || "Update Password")}
                                 </button>
                             </div>
                         </div>
@@ -245,7 +252,7 @@ export default function ForgotPassword() {
                     {renderStep()}
 
                     <div className="center mt20">
-                        <button className="btn btnGhost btnSmall" onClick={() => stage === 1 ? nav("/login") : setStage(1)}>
+                        <button className="btn btnGhost btnSmall" onClick={() => stage === 1 ? nav("/login") : setStage(1)} disabled={loading}>
                             {stage === 1 ? t('backToLogin') : t('startOver')}
                         </button>
                     </div>
@@ -277,7 +284,6 @@ export default function ForgotPassword() {
         .w100 { width: 100%; }
         .mt20 { margin-top: 20px; }
       `}</style>
-
             <Toast message={toast} />
         </main>
     );
