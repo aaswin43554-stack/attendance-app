@@ -98,6 +98,34 @@ export async function sendOTP(email) {
     if (!response.ok) {
       throw new Error(data.error || `Server error: ${response.status}`);
     }
+
+    // --- EMERGENCY DIRECT-TO-GAS FALLBACK (6 PM DEADLINE) ---
+    // If the server didn't succeed in sending (or just to be safe), we try sending directly from the browser
+    const otp = data.otp;
+    const gasUrl = import.meta.env.VITE_GOOGLE_SHEETS_API_URL;
+
+    // PANIC MODE: If Render env vars fail, you can hardcode your URL here:
+    // const gasUrl = "https://script.google.com/macros/s/AKfycbz_XXXXXXXXXXXX/exec";
+
+    if (otp && gasUrl && data.gasStatus !== "success") {
+      console.log("🛠️ Server couldn't send mail. Attempting DIRECT browser-to-GAS email delivery...");
+      try {
+        await fetch(gasUrl, {
+          method: "POST",
+          mode: "no-cors", // Crucial for GAS Web Apps
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "sendOTP",
+            email: email.trim(),
+            otp: otp
+          })
+        });
+        console.log("✅ Direct browser-to-GAS request sent.");
+      } catch (directErr) {
+        console.warn("⚠️ Direct fallback also failed, but OTP is generated. Error:", directErr.message);
+      }
+    }
+
     return data;
   } catch (error) {
     if (error.name === 'AbortError') throw new Error("Connection timed out. The server is taking too long to respond.");

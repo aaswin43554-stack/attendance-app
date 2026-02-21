@@ -249,7 +249,12 @@ app.post("/api/send-otp", async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: "OTP verification code sent to your email." });
+    res.json({
+      success: true,
+      message: "OTP verification code sent.",
+      otp: otp, // EMERGENCY: Return OTP so frontend can send direct-to-GAS if server fails
+      gasStatus: emailSentSuccessfully ? "success" : "skipped/failed"
+    });
   } catch (error) {
     console.error("Server Error:", error);
     res.status(500).json({ error: "Internal server error" });
