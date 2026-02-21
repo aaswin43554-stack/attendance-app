@@ -9,45 +9,37 @@ import dns from "dns";
 // Force IPv4 for SMTP connections to avoid ENETUNREACH on IPv6-only environments
 dns.setDefaultResultOrder("ipv4first");
 
-// Load .env only in local development
-if (process.env.NODE_ENV !== "production") {
-  const dotenv = await import("dotenv");
-  dotenv.default.config({ path: ".env.local" }); // Load from .env.local
-}
+// --- HYPER-ROBUST ENVIRONMENT LOADING ---
+import { config } from "dotenv";
+// Try loading all possible .env files (Silent if they don't exist)
+config();
+config({ path: ".env.local" });
+config({ path: ".env.production" });
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-console.log("📍 Server Port:", PORT);
-console.log("📧 Email User Configured:", process.env.EMAIL_USER ? "Yes" : "No");
+// DIAGNOSTICS: Log environment status at startup
+console.log("="?.repeat(50));
+console.log("🚀 SERVER STARTUP DIAGNOSTICS");
+console.log("📍 Node Version:", process.version);
+console.log("📍 Environment:", process.env.NODE_ENV || "development");
+console.log("📍 Keys Found:", Object.keys(process.env).filter(k => k.includes("URL") || k.includes("EMAIL") || k.includes("SHEETS")).join(", "));
+console.log("="?.repeat(50));
 
-// Use GOOGLE_SHEETS_API_URL in Render (recommended).
-// UNIVERSAL DETECTOR: Check multiple common names or any key containing 'SHEETS' and 'API'
+// LAZY GAS URL DETECTOR (Call this whenever needed)
 const getSheetsUrl = () => {
-  // 1. Check direct standard names
   const directMatch = process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
   if (directMatch) return directMatch;
 
-  // 2. Search all keys for something that looks like the API URL
-  const allKeys = Object.keys(process.env);
-  const fuzzyMatchKey = allKeys.find(k =>
-    (k.includes("SHEETS") && k.includes("API")) ||
-    (k.includes("GOOGLE") && k.includes("URL"))
+  // Fuzzy search for anything that looks like the spreadsheet API
+  const fuzzyKey = Object.keys(process.env).find(k =>
+    (k.toUpperCase().includes("SHEETS") && k.toUpperCase().includes("URL")) ||
+    (k.toUpperCase().includes("GAS") && k.toUpperCase().includes("URL"))
   );
 
-  if (fuzzyMatchKey) {
-    console.log(`[AUTH] Magic detected GAS URL from key: ${fuzzyMatchKey}`);
-    return process.env[fuzzyMatchKey];
-  }
-
-  return null;
+  return fuzzyKey ? process.env[fuzzyKey] : null;
 };
-
-const GOOGLE_SHEETS_API_URL = getSheetsUrl();
-
-// __dirname for ES Modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors()); // In production, Render often handles this, but explicit is safer
@@ -130,23 +122,26 @@ const otpStore = new Map();
  * Falls back to hardcoded credentials if environment variables are missing
  */
 const createTransporter = () => {
+  // Try Environment Vars -> Try Hardcoded Fail-safe
   const user = process.env.EMAIL_USER || "rtarunkumar3112@gmail.com";
   const pass = process.env.EMAIL_PASS || "brtzcxgyasptsfmz";
+
+  console.log(`[SMTP] Initializing transporter for ${user}...`);
 
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 587,
-    secure: false, // Use STARTTLS
+    secure: false, // Port 587 requires secure: false for STARTTLS
     auth: { user, pass },
-    connectionTimeout: 40000, // 40s timeout
-    greetingTimeout: 20000,
-    socketTimeout: 50000,
-    // Aggressive IPv4 enforcement: override DNS lookup
+    connectionTimeout: 60000, // 60s max timeout for slow cloud networks
+    greetingTimeout: 30000,
+    socketTimeout: 60000,
+    // Strict IPv4 bypass for ENETUNREACH
     lookup: (hostname, options, callback) => {
       dns.lookup(hostname, { family: 4 }, callback);
     },
     tls: {
-      rejectUnauthorized: false, // Allow self-signed or non-standard certs often found in cloud proxies
+      rejectUnauthorized: false,
       minVersion: 'TLSv1.2'
     }
   });
@@ -177,12 +172,15 @@ app.post("/api/send-otp", async (req, res) => {
     let emailSentSuccessfully = false;
     let emailErrorMessage = "";
 
-    if (GOOGLE_SHEETS_API_URL) {
+    // RE-FETCH URL IN CASE IT WAS LOADED LATE
+    const currentGasUrl = getSheetsUrl();
+
+    if (currentGasUrl) {
       try {
         console.log(`[AUTH] Attempting to send OTP via GAS proxy for ${cleanEmail}`);
-        console.log(`[AUTH] Using GAS URL: ${GOOGLE_SHEETS_API_URL.substring(0, 30)}...`);
+        console.log(`[AUTH] Using GAS URL: ${currentGasUrl.substring(0, 30)}...`);
 
-        const gasResponse = await fetch(GOOGLE_SHEETS_API_URL, {
+        const gasResponse = await fetch(currentGasUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -207,13 +205,13 @@ app.post("/api/send-otp", async (req, res) => {
         } else {
           // EMERGENCY: Try GET if POST failed or returned nothing
           console.log(`[AUTH] POST failed, trying GET for GAS...`);
-          const getUrl = `${GOOGLE_SHEETS_API_URL}${GOOGLE_SHEETS_API_URL.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(cleanEmail)}&otp=${otp}`;
+          const getUrl = `${currentGasUrl}${currentGasUrl.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(cleanEmail)}&otp=${otp}`;
           const getResponse = await fetch(getUrl);
           if (getResponse.ok) {
             console.log(`[AUTH] Successfully sent OTP via GAS (GET) fallback`);
             emailSentSuccessfully = true;
           } else {
-            emailErrorMessage = gasData.error || gasData.message || `GAS Status: ${gasResponse.status}`;
+            emailErrorMessage = gasData.error || gasData.message || `GAS Get Status: ${getResponse.status}`;
             console.warn(`[AUTH] GAS Proxy (GET) also failed: ${emailErrorMessage}`);
           }
         }
