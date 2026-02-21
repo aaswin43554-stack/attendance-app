@@ -69,23 +69,34 @@ export async function verifyLastPassword(email, lastPass) {
  * Sends a custom OTP via our backend server
  */
 export async function sendOTP(email) {
+  // Use VITE_BACKEND_URL if provided, else empty for relative path
   let backendUrl = import.meta.env.VITE_BACKEND_URL || "";
 
-  // If running on a live domain (not localhost) and backendUrl points to localhost,
-  // use relative path to ensure we hit the same Render server.
-  if (window.location.hostname !== "localhost" && backendUrl.includes("localhost")) {
-    backendUrl = ""; // Use relative path
+  // ROBUST PRODUCTION DETECTION
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost" &&
+    (backendUrl.includes("localhost") || backendUrl === "")) {
+    backendUrl = window.location.origin;
   }
 
-  const response = await fetch(`${backendUrl}/api/send-otp`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
+  const endpoint = `${backendUrl}/api/send-otp`.replace(/([^:])\/\//g, '$1/');
+  console.log("🚀 Requesting OTP from:", endpoint);
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Failed to send OTP");
-  return true;
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `Server error: ${response.status}`);
+    }
+    return data;
+  } catch (error) {
+    console.error("❌ sendOTP Fetch Error:", error);
+    throw new Error(`Connection error: ${error.message}. Please check if the server is running.`);
+  }
 }
 
 /**
@@ -94,19 +105,21 @@ export async function sendOTP(email) {
 export async function verifyOTPCode(email, otp) {
   let backendUrl = import.meta.env.VITE_BACKEND_URL || "";
 
-  // Absolute to relative fallback for production
-  if (window.location.hostname !== "localhost" && backendUrl.includes("localhost")) {
-    backendUrl = "";
+  if (typeof window !== "undefined" && window.location.hostname !== "localhost" &&
+    (backendUrl.includes("localhost") || backendUrl === "")) {
+    backendUrl = window.location.origin;
   }
 
-  const response = await fetch(`${backendUrl}/api/verify-otp`, {
+  const endpoint = `${backendUrl}/api/verify-otp`.replace(/([^:])\/\//g, '$1/');
+
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, otp }),
   });
 
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Invalid OTP");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Invalid OTP code");
   return true;
 }
 
