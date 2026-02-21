@@ -1,17 +1,21 @@
 import express from "express";
 import cors from "cors";
 import fetch from "node-fetch";
+import nodemailer from "nodemailer";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Load .env only in local development (Render uses Environment Variables)
+// Load .env only in local development
 if (process.env.NODE_ENV !== "production") {
   const dotenv = await import("dotenv");
-  dotenv.default.config();
+  dotenv.default.config({ path: ".env.local" }); // Load from .env.local
 }
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 3000;
+
+console.log("📍 Server Port:", PORT);
+console.log("📧 Email User Configured:", process.env.EMAIL_USER ? "Yes" : "No");
 
 // Use GOOGLE_SHEETS_API_URL in Render (recommended).
 // Keep VITE_GOOGLE_SHEETS_API_URL as fallback so existing code still works.
@@ -102,20 +106,91 @@ app.post("/api/notify", async (req, res) => {
   }
 });
 
+// In-memory storage for OTPs (In production, use Redis or a Database)
+const otpStore = new Map();
+
+// Configure Nodemailer Transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
 /**
- * OTP endpoint
- * POST /api/otp
+ * Generate and Send OTP via Nodemailer
  */
-app.post("/api/otp", async (req, res) => {
+app.post("/api/send-otp", async (req, res) => {
   try {
-    const { email, phone } = req.body;
-    console.log(`[OTP] Sending OTP to ${phone} for ${email}`);
-    // Future: Integrate Twilio or n8n here
-    res.json({ success: true, message: "OTP sent successfully" });
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email required" });
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Store OTP for 10 minutes
+    otpStore.set(email.toLowerCase(), {
+      otp,
+      expires: Date.now() + 10 * 60 * 1000
+    });
+
+    // For development, we log the OTP to the console so it works even if email fails
+    console.log(`[DEVELOPMENT] Valid OTP for ${email}: ${otp}`);
+
+    // Attempt to send email
+    try {
+      const mailOptions = {
+        from: `"TronX Labs Support" <${process.env.EMAIL_USER || "no-reply@tronxlabs.com"}>`,
+        to: email,
+        subject: "Your Verification Code - TronX Labs",
+        html: `
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+            <h2 style="color: #1e293b; text-align: center; margin-bottom: 8px;">Verification Code</h2>
+            <p style="color: #64748b; text-align: center; font-size: 16px;">Use the code below to reset your password.</p>
+            <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+              <span style="font-size: 42px; font-weight: bold; color: #3b82f6; letter-spacing: 12px; font-family: monospace;">${otp}</span>
+            </div>
+            <p style="color: #94a3b8; font-size: 14px; text-align: center;">This code will expire in 10 minutes. If you didn't request this, please ignore this email.</p>
+          </div>
+        `,
+      };
+
+      if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        await transporter.sendMail(mailOptions);
+        console.log(`[AUTH] Styled OTP sent to ${email}`);
+      } else {
+        console.warn("⚠️ SMTP credentials missing in .env.local. OTP logged to console only.");
+      }
+    } catch (mailError) {
+      console.error("❌ Email Sending Failed:", mailError.message);
+      // We don't throw error here so the user can still use the OTP from the console in dev
+    }
+
+    res.json({ success: true, message: "OTP verification ready (check console/email)" });
   } catch (error) {
-    console.error("OTP Error:", error);
-    res.status(500).json({ error: "Failed to send OTP" });
+    console.error("Server Error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
+});
+
+/**
+ * Verify OTP
+ */
+app.post("/api/verify-otp", (req, res) => {
+  const { email, otp } = req.body;
+  const stored = otpStore.get(email.toLowerCase());
+
+  if (!stored) return res.status(400).json({ error: "No OTP found. Please request a new one." });
+  if (Date.now() > stored.expires) {
+    otpStore.delete(email.toLowerCase());
+    return res.status(400).json({ error: "OTP has expired." });
+  }
+  if (stored.otp !== otp) return res.status(400).json({ error: "Invalid OTP code." });
+
+  // Clear OTP after successful verification
+  otpStore.delete(email.toLowerCase());
+  res.json({ success: true, message: "OTP verified" });
 });
 
 // ✅ Serve Vite build output (dist)
@@ -131,10 +206,32 @@ app.use((req, res, next) => {
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
-// Start server (Render requires listening on process.env.PORT)
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(
-    `📊 Google Sheets API configured: ${GOOGLE_SHEETS_API_URL ? "Yes" : "No"}`
-  );
+// Start server
+const server = app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server is listening at http://localhost:${PORT}`);
+  console.log(`📧 Email User: ${process.env.EMAIL_USER ? process.env.EMAIL_USER : "Not Configured"}`);
+  console.log(`📊 Google Sheets API: ${GOOGLE_SHEETS_API_URL ? "Connected" : "Not Configured"}`);
+});
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`❌ Port ${PORT} is busy. Please kill the process on this port or change it in server.js`);
+  } else {
+    console.error("❌ Server Error:", err);
+  }
+  process.exit(1);
+});
+
+// Prevent process from exiting (Health check)
+setInterval(() => {
+  // console.log("💓 Server heartbeat...");
+}, 300000);
+
+// Global Error Handling
+process.on("uncaughtException", (err) => {
+  console.error("💥 Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
 });

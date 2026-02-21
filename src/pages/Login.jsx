@@ -20,6 +20,8 @@ export default function Login() {
 
             if (user.role === "admin") {
                 nav("/admin/dashboard");
+            } else if (user.role === "team_leader") {
+                nav("/team-leader/dashboard");
             } else {
                 nav("/employee/dashboard");
             }

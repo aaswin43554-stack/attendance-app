@@ -1,9 +1,11 @@
 import { getUsers, setUsers, setSession } from "./storage";
 import {
+  supabase,
   addUser,
   getUserByEmailAndPassword,
   getUserByEmail,
   updateUserPassword,
+  userExists,
 } from "./supabase";
 
 /**
@@ -25,7 +27,7 @@ export async function signupEmployee({ name, phone, email, pass }) {
 
     // Add user to Google Sheet
     const user = {
-      id: "u_" + Math.random().toString(16).slice(2) + Date.now().toString(16),
+      id: crypto.randomUUID(), // Generate a valid UUID for Supabase primary keys
       name: name.trim(),
       phone: phone.trim(),
       email: e,
@@ -44,6 +46,7 @@ export async function signupEmployee({ name, phone, email, pass }) {
 export async function resetPassword(email) {
   const e = email.trim().toLowerCase();
   try {
+    // We still check if the user exists in our DB first
     const user = await getUserByEmail(e);
     if (!user) throw new Error("No account found with this email.");
     return user;
@@ -62,28 +65,49 @@ export async function verifyLastPassword(email, lastPass) {
   }
 }
 
+/**
+ * Sends a custom OTP via our backend server
+ */
+export async function sendOTP(email) {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+  const response = await fetch(`${backendUrl}/api/send-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Failed to send OTP");
+  return true;
+}
+
+/**
+ * Verifies the custom OTP via our backend
+ */
+export async function verifyOTPCode(email, otp) {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+  const response = await fetch(`${backendUrl}/api/verify-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, otp }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Invalid OTP");
+  return true;
+}
+
+/**
+ * Updates the password directly in the 'users' table
+ */
 export async function updatePassword(email, newPass) {
   try {
+    // We update the password directly in your custom users table
+    // (Bypassing Supabase Auth since we used our own OTP logic)
     await updateUserPassword(email, newPass);
     return true;
   } catch (error) {
     throw new Error(error.message || "Failed to update password");
-  }
-}
-
-export async function sendOTP(email, phone) {
-  try {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
-    const response = await fetch(`${backendUrl}/api/otp`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, phone }),
-    });
-    if (!response.ok) throw new Error("Failed to send OTP.");
-    return true;
-  } catch (error) {
-    console.error("OTP Error:", error);
-    return true; // Still return true for demo/mock purposes
   }
 }
 

@@ -57,7 +57,7 @@ export default function AdminDashboard() {
         ]);
 
         const employeesList = users
-          .filter((u) => u.role === "employee")
+          .filter((u) => u.role === "employee" || u.role === "team_leader")
           .sort((a, b) => a.name.localeCompare(b.name));
 
         // Extract virtual workers from attendance records
@@ -197,10 +197,32 @@ export default function AdminDashboard() {
     setShowSettings(false);
   };
 
+  const updateRole = async (email, newRole) => {
+    try {
+      const { updateUserRole } = await import("../../services/supabase");
+      await updateUserRole(email, newRole);
+      setEmployees(prev => prev.map(u => u.email === email ? { ...u, role: newRole } : u));
+      alert("Role updated successfully");
+    } catch (e) {
+      alert("Failed to update role: " + e.message);
+    }
+  };
+
+  const updateManager = async (employeeEmail, leaderEmail) => {
+    try {
+      const { assignEmployeeToLeader } = await import("../../services/supabase");
+      await assignEmployeeToLeader(employeeEmail, leaderEmail);
+      setEmployees(prev => prev.map(u => u.email === employeeEmail ? { ...u, managed_by: leaderEmail } : u));
+      alert("Manager assigned successfully");
+    } catch (e) {
+      alert("Failed to assign manager: " + e.message);
+    }
+  };
+
 
 
   const downloadCSV = () => {
-    const headers = ["Name", "Email", "Phone", "Date", "Time", "Type", "Address", "Platform"];
+    const headers = ["Name", "Email", "Phone", "Date", "Time", "Type", "Address", "Platform", "Checked By", "Shared Device"];
     // Create maps for quick lookup (case-insensitive keys)
     const emailMap = {};
     const phoneMap = {};
@@ -215,6 +237,10 @@ export default function AdminDashboard() {
       const { hours, minutes, seconds } = getBangkokTimeParts(r.time);
       const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 
+      // Try reading audit info from top-level or from 'device' JSON
+      const checkedBy = r.checked_in_by || r.device?.checkedInBy || "";
+      const isShared = r.shared_device || r.device?.sharedDevice ? "Yes" : "No";
+
       // Look up info from the maps (case-insensitive)
       const userEmail = emailMap[r.userName?.toLowerCase()] || "";
       const userPhone = phoneMap[r.userName?.toLowerCase()] || "";
@@ -227,7 +253,9 @@ export default function AdminDashboard() {
         timeStr,
         r.type,
         `"${(r.address || "").replace(/"/g, '""')}"`,
-        r.device?.platform || ""
+        r.device?.platform || "",
+        checkedBy,
+        isShared
       ];
     });
 
@@ -339,6 +367,9 @@ export default function AdminDashboard() {
                           </div>
                           <div className="muted small">{t('last')}: {latestTime}</div>
                           <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                            <span className="pill" style={{ background: u.role === 'team_leader' ? "#dcfce7" : "#f1f5f9", color: u.role === 'team_leader' ? "#166534" : "#475569", fontSize: "10px", padding: "2px 6px" }}>
+                              {u.role === 'team_leader' ? 'Team Leader' : 'Employee'}
+                            </span>
                             {calculateTodayStats(u.name).isLateLogin && (
                               <span className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "10px", padding: "2px 6px" }}>{t('lateLogin')}</span>
                             )}
@@ -376,6 +407,43 @@ export default function AdminDashboard() {
                         <div className="muted small">
                           {selected.email}{selected.phone ? " • " + selected.phone : ""}
                         </div>
+
+                        {!selected.isVirtual && (
+                          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
+                            <div style={{ flex: 1, minWidth: 150 }}>
+                              <label className="muted small" style={{ fontWeight: 700 }}>Role</label>
+                              <select
+                                className="input"
+                                value={selected.role}
+                                onChange={(e) => updateRole(selected.email, e.target.value)}
+                                style={{ width: "100%", padding: "4px 8px", fontSize: "13px" }}
+                              >
+                                <option value="employee">Employee</option>
+                                <option value="team_leader">Team Leader</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </div>
+                            {selected.role === "employee" && (
+                              <div style={{ flex: 1, minWidth: 150 }}>
+                                <label className="muted small" style={{ fontWeight: 700 }}>Manager (Team Leader)</label>
+                                <select
+                                  className="input"
+                                  value={selected.managed_by || ""}
+                                  onChange={(e) => updateManager(selected.email, e.target.value)}
+                                  style={{ width: "100%", padding: "4px 8px", fontSize: "13px" }}
+                                >
+                                  <option value="">No Manager</option>
+                                  {employees
+                                    .filter(u => u.role === "team_leader")
+                                    .map(tl => (
+                                      <option key={tl.id} value={tl.email}>{tl.name}</option>
+                                    ))
+                                  }
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         <div className="hr" />
 
@@ -450,6 +518,11 @@ export default function AdminDashboard() {
                           </div>
                           <div className="muted2 small" style={{ textAlign: "right" }}>
                             <div className="mono">{r.device?.platform || ""}</div>
+                            {(r.checked_in_by || r.device?.checkedInBy) && (
+                              <div style={{ color: "var(--primary)", fontWeight: 700, marginTop: 4 }}>
+                                via {r.checked_in_by || r.device?.checkedInBy}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>

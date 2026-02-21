@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
 import Toast from "../ui/Toast";
-import { resetPassword, verifyLastPassword, updatePassword, sendOTP } from "../services/auth";
+import { resetPassword, verifyLastPassword, updatePassword, sendOTP, verifyOTPCode } from "../services/auth";
 import { useLanguage } from "../context/LanguageContext";
 
 /**
@@ -86,12 +86,17 @@ export default function ForgotPassword() {
         }
     };
 
-    const handleStage3b = (e) => {
+    const handleStage3b = async (e) => {
         e.preventDefault();
-        if (otp.length === 4) {
+        try {
+            setLoading(true);
+            // Verify the real OTP code with Supabase
+            await verifyOTPCode(user.email, otp);
             setStage(4);
-        } else {
-            showToast(t('otpLengthError'));
+        } catch (err) {
+            showToast(err.message || "Invalid or expired OTP");
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -142,7 +147,7 @@ export default function ForgotPassword() {
                             {t('lastPasswordVerify')}
                         </button>
                         <button className="btn btnOutline w100" onClick={() => handleChoice('otp')}>
-                            {t('otpVerify')} ({user.phone ? `****${user.phone.slice(-4)}` : "phone"})
+                            📧 Send recovery code to email ({user.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")})
                         </button>
                     </div>
                 );
@@ -174,15 +179,15 @@ export default function ForgotPassword() {
                             <label>{t('enterOtp')}</label>
                             <input
                                 type="text"
-                                maxLength="4"
+                                maxLength="6"
                                 value={otp}
                                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                                placeholder="0000"
+                                placeholder="000000"
                                 className="input-premium center mono"
                                 style={{ fontSize: '1.5rem', letterSpacing: '0.5rem' }}
                                 required
                             />
-                            <div className="muted small center mt10">{t('otpMockHint')}</div>
+                            <div className="muted small center mt10">Check your email for the 6-digit verification code.</div>
                             <div className="row mt20">
                                 <button className="btn btnPrimary w100" type="submit" disabled={loading}>
                                     {t('verifyOtp')}
