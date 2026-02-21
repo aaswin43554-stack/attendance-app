@@ -126,23 +126,25 @@ app.post("/api/send-otp", async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
 
+    const cleanEmail = email.trim().toLowerCase();
+
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store OTP for 10 minutes
-    otpStore.set(email.toLowerCase(), {
+    otpStore.set(cleanEmail, {
       otp,
       expires: Date.now() + 10 * 60 * 1000
     });
 
     // For development, we log the OTP to the console so it works even if email fails
-    console.log(`[DEVELOPMENT] Valid OTP for ${email}: ${otp}`);
+    console.log(`[DEVELOPMENT] Valid OTP for ${cleanEmail}: ${otp}`);
 
     // Attempt to send email
     try {
       const mailOptions = {
         from: `"TronX Labs Support" <${process.env.EMAIL_USER || "no-reply@tronxlabs.com"}>`,
-        to: email,
+        to: cleanEmail,
         subject: "Your Verification Code - TronX Labs",
         html: `
           <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
@@ -158,16 +160,17 @@ app.post("/api/send-otp", async (req, res) => {
 
       if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
         await transporter.sendMail(mailOptions);
-        console.log(`[AUTH] Styled OTP sent to ${email}`);
+        console.log(`[AUTH] Styled OTP sent to ${cleanEmail}`);
       } else {
-        console.warn("⚠️ SMTP credentials missing in .env.local. OTP logged to console only.");
+        console.error("❌ SMTP credentials missing in environment. Email not sent.");
+        return res.status(500).json({ error: "Email service not configured. Please contact support." });
       }
     } catch (mailError) {
       console.error("❌ Email Sending Failed:", mailError.message);
-      // We don't throw error here so the user can still use the OTP from the console in dev
+      return res.status(500).json({ error: `Failed to send email: ${mailError.message}` });
     }
 
-    res.json({ success: true, message: "OTP verification ready (check console/email)" });
+    res.json({ success: true, message: "OTP verification code sent to your email." });
   } catch (error) {
     console.error("Server Error:", error);
     res.status(500).json({ error: "Internal server error" });
