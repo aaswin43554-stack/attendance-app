@@ -68,96 +68,63 @@ export async function verifyLastPassword(email, lastPass) {
 /**
  * Sends a custom OTP via our backend server
  */
+/**
+ * Generate and Send OTP (Bulletproof Production Version)
+ */
 export async function sendOTP(email) {
-  // Use VITE_BACKEND_URL if provided, else empty for relative path
-  let backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+  // Use VITE_API_BASE_URL if provided (preferred for Render/Vercel)
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 
-  // ROBUST PRODUCTION DETECTION
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost" &&
-    (backendUrl.includes("localhost") || backendUrl === "")) {
-    backendUrl = window.location.origin;
-  }
-
-  const endpoint = `${backendUrl}/api/send-otp`.replace(/([^:])\/\//g, '$1/');
+  // Endpoint suffix
+  const endpoint = `${apiBaseUrl}/api/auth/send-reset-otp`.replace(/([^:])\/\//g, '$1/');
   console.log("🚀 Requesting OTP from:", endpoint);
 
   try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 45000); // 45s timeout
-
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim() }),
-      signal: controller.signal
     });
-
-    clearTimeout(id);
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || `Server error: ${response.status}`);
-    }
-
-    // --- EMERGENCY DIRECT-TO-GAS FALLBACK (6 PM DEADLINE) ---
-    // If the server didn't succeed in sending (or just to be safe), we try sending directly from the browser
-    const otp = data.otp;
-    const gasUrl = import.meta.env.VITE_GOOGLE_SHEETS_API_URL;
-
-    // PANIC MODE: If Render env vars fail, you can hardcode your URL here:
-    // const gasUrl = "https://script.google.com/macros/s/AKfycbz_XXXXXXXXXXXX/exec";
-
-    if (otp && gasUrl && data.gasStatus !== "success") {
-      console.log("🛠️ Server couldn't send mail. Attempting DIRECT browser-to-GAS email delivery...");
-      try {
-        // Method A: Try POST
-        await fetch(gasUrl, {
-          method: "POST",
-          mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "sendOTP", email: email.trim(), otp: otp })
-        });
-
-        // Method B: Try GET (Maximum compatibility)
-        const getUrl = `${gasUrl}${gasUrl.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(email.trim())}&otp=${otp}`;
-        await fetch(getUrl, { mode: "no-cors" });
-
-        console.log("✅ Direct browser-to-GAS requests sent (POST+GET).");
-      } catch (directErr) {
-        console.warn("⚠️ Direct fallback also failed, but OTP is generated. Error:", directErr.message);
-      }
+      throw new Error(data.error || data.message || `Server error: ${response.status}`);
     }
 
     return data;
   } catch (error) {
-    if (error.name === 'AbortError') throw new Error("Connection timed out. The server is taking too long to respond.");
-    console.error("❌ sendOTP Fetch Error:", error);
-    throw new Error(`Connection error: ${error.message}.`);
+    console.error("❌ sendOTP Error:", error);
+    throw new Error(`OTP Error: ${error.message}`);
   }
 }
 
 /**
- * Verifies the custom OTP via our backend
+ * Verifies the hashed OTP (Bulletproof Production Version)
  */
 export async function verifyOTPCode(email, otp) {
-  let backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+  const endpoint = `${apiBaseUrl}/api/auth/verify-reset-otp`.replace(/([^:])\/\//g, '$1/');
 
-  if (typeof window !== "undefined" && window.location.hostname !== "localhost" &&
-    (backendUrl.includes("localhost") || backendUrl === "")) {
-    backendUrl = window.location.origin;
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        otp: otp.trim()
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || data.message || "Invalid or expired code");
+    }
+
+    return true; // Return true as expected by the existing frontend logic
+  } catch (error) {
+    console.error("❌ verifyOTPCode Error:", error);
+    throw new Error(error.message);
   }
-
-  const endpoint = `${backendUrl}/api/verify-otp`.replace(/([^:])\/\//g, '$1/');
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, otp }),
-  });
-
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Invalid OTP code");
-  return true;
 }
 
 /**
