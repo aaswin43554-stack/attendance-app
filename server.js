@@ -122,7 +122,10 @@ const createTransporter = () => {
     connectionTimeout: 30000, // 30s timeout
     greetingTimeout: 15000,
     socketTimeout: 45000,
-    family: 4, // Force IPv4 to avoid ENETUNREACH on IPv6-only environments
+    // Aggressive IPv4 enforcement: override DNS lookup
+    lookup: (hostname, options, callback) => {
+      dns.lookup(hostname, { family: 4 }, callback);
+    },
   });
 };
 
