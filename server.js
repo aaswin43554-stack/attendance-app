@@ -155,16 +155,32 @@ const createTransporter = () => {
 };
 
 /**
+ * Helper: node-fetch with a strict timeout
+ */
+async function fetchWithTimeout(url, options, timeoutMs = 8000) {
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error(`Timeout after ${timeoutMs}ms`);
+    throw err;
+  }
+}
+
+/**
  * Generate and Send OTP via Nodemailer
  */
 app.post("/api/send-otp", async (req, res) => {
+  const startTime = Date.now();
+  console.log(`[AUTH] [START] Request received for OTP`);
   try {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: "Email required" });
 
     const cleanEmail = email.trim().toLowerCase();
-
-    // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Store OTP for 10 minutes
@@ -173,7 +189,7 @@ app.post("/api/send-otp", async (req, res) => {
       expires: Date.now() + 10 * 60 * 1000
     });
 
-    console.log(`[AUTH] Generating OTP for ${cleanEmail}: ${otp}`);
+    console.log(`[AUTH] OTP generated for ${cleanEmail}: ${otp}`);
 
     // PART 1: Try sending via Google Apps Script API (Highly reliable in cloud)
     let emailSentSuccessfully = false;
@@ -183,95 +199,89 @@ app.post("/api/send-otp", async (req, res) => {
     const currentGasUrl = getSheetsUrl();
 
     if (currentGasUrl) {
+      const gasStartTime = Date.now();
       try {
-        console.log(`[AUTH] Attempting to send OTP via GAS proxy for ${cleanEmail}`);
-        console.log(`[AUTH] Using GAS URL: ${currentGasUrl.substring(0, 30)}...`);
-
-        const gasResponse = await fetch(currentGasUrl, {
+        console.log(`[AUTH] [GAS-PHASE] Attempting delivery (8s limit)...`);
+        const gasResponse = await fetchWithTimeout(currentGasUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "sendOTP",
-            email: cleanEmail,
-            otp: otp
-          }),
-        });
+          body: JSON.stringify({ action: "sendOTP", email: cleanEmail, otp: otp }),
+        }, 8000);
 
         const textResponse = await gasResponse.text();
         let gasData = {};
-        try {
-          gasData = JSON.parse(textResponse);
-        } catch (e) {
-          console.error(`[AUTH] GAS returned non-JSON response: ${textResponse.substring(0, 100)}`);
-          emailErrorMessage = `GAS returned invalid response. Check if script is deployed as web app.`;
-        }
+        try { gasData = JSON.parse(textResponse); } catch (e) { }
 
         if (gasResponse.ok && (gasData.success || gasData.status === "success" || gasData.status === "ok")) {
-          console.log(`[AUTH] Successfully sent OTP via GAS (POST) to ${cleanEmail}`);
+          console.log(`[AUTH] Success via GAS-POST after ${Date.now() - gasStartTime}ms`);
           emailSentSuccessfully = true;
         } else {
-          // EMERGENCY: Try GET if POST failed or returned nothing
-          console.log(`[AUTH] POST failed, trying GET for GAS...`);
+          console.log(`[AUTH] GAS-POST failed. Trying GAS-GET...`);
           const getUrl = `${currentGasUrl}${currentGasUrl.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(cleanEmail)}&otp=${otp}`;
-          const getResponse = await fetch(getUrl);
+          const getResponse = await fetchWithTimeout(getUrl, {}, 4000); // 4s for GET
           if (getResponse.ok) {
-            console.log(`[AUTH] Successfully sent OTP via GAS (GET) fallback`);
+            console.log(`[AUTH] Success via GAS-GET after total GAS phase ${Date.now() - gasStartTime}ms`);
             emailSentSuccessfully = true;
           } else {
             emailErrorMessage = gasData.error || gasData.message || `GAS Get Status: ${getResponse.status}`;
             console.warn(`[AUTH] GAS Proxy (GET) also failed: ${emailErrorMessage}`);
           }
         }
-      } catch (gasErr) {
-        emailErrorMessage = `GAS Fetch Error: ${gasErr.message}`;
-        console.error(`[AUTH] GAS Proxy Error:`, gasErr.message);
+      } catch (err) {
+        console.warn(`[AUTH] GAS Phase timed out or failed after ${Date.now() - gasStartTime}ms: ${err.message}`);
+        emailErrorMessage = `GAS Error: ${err.message}`;
       }
     } else {
       emailErrorMessage = "Google Sheets API URL is MISSING in environment variables.";
       console.warn("[AUTH] GAS Proxy skipped: GOOGLE_SHEETS_API_URL not set.");
     }
 
-    // PART 2: Fallback to Nodemailer if GAS fails or is not configured
+    // PART 2: Fallback to Nodemailer (15s limit)
     if (!emailSentSuccessfully) {
-      console.log(`[AUTH] Falling back to Nodemailer for ${cleanEmail}. Reason: ${emailErrorMessage}`);
+      const smtpStartTime = Date.now();
+      console.log(`[AUTH] [SMTP-PHASE] Falling back (15s limit). Reason: ${emailErrorMessage}`);
       try {
         const mailOptions = {
           from: `"TronX Labs Support" <${process.env.EMAIL_USER || "rtarunkumar3112@gmail.com"}>`,
           to: cleanEmail,
           subject: "Your Verification Code - TronX Labs",
           html: `
-            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-              <h2 style="color: #1e293b; text-align: center; margin-bottom: 8px;">Verification Code</h2>
-              <p style="color: #64748b; text-align: center; font-size: 16px;">Use the code below to reset your password.</p>
-              <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-                <span style="font-size: 42px; font-weight: bold; color: #3b82f6; letter-spacing: 12px; font-family: monospace;">${otp}</span>
+            <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
+              <h2 style="color: #1e293b; text-align: center;">Verification Code</h2>
+              <div style="background: #f8fafc; border-radius: 12px; padding: 24px; text-align: center;">
+                <span style="font-size: 42px; font-weight: bold; color: #3b82f6; letter-spacing: 12px;">${otp}</span>
               </div>
-              <p style="color: #94a3b8; font-size: 14px; text-align: center;">This code will expire in 10 minutes. If you didn't request this, please ignore this email.</p>
             </div>
           `,
         };
 
         const transporter = createTransporter();
-        await transporter.sendMail(mailOptions);
-        console.log(`[AUTH] Nodemailer OTP sent to ${cleanEmail}`);
+        const smtpPromise = transporter.sendMail(mailOptions);
+
+        // Wrap SMTP in a timeout race
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("SMTP Timeout")), 15000));
+        await Promise.race([smtpPromise, timeoutPromise]);
+
+        console.log(`[AUTH] Success via SMTP after ${Date.now() - smtpStartTime}ms`);
         emailSentSuccessfully = true;
       } catch (mailError) {
-        console.error("❌ Nodemailer Failed:", mailError.message);
+        console.error(`[AUTH] SMTP Failed/Timed out after ${Date.now() - smtpStartTime}ms:`, mailError.message);
         return res.status(500).json({
-          error: `Failed to send email. (GAS error: ${emailErrorMessage} | SMTP error: ${mailError.message}).`
+          error: `Delivery timeout. (GAS: ${emailErrorMessage} | SMTP: ${mailError.message}).`
         });
       }
     }
 
+    console.log(`[AUTH] [FINISH] Total duration: ${Date.now() - startTime}ms`);
     res.json({
       success: true,
       message: "OTP verification code sent.",
-      otp: otp, // EMERGENCY: Return OTP so frontend can send direct-to-GAS if server fails
-      gasStatus: emailSentSuccessfully ? "success" : "skipped/failed"
+      otp: otp,
+      duration: Date.now() - startTime
     });
   } catch (error) {
-    console.error("Server Error:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("[AUTH] Fatal Server Error:", error);
+    if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
   }
 });
 
