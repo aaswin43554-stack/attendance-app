@@ -256,6 +256,10 @@ export default function ForgotPassword() {
                             {stage === 1 ? t('backToLogin') : t('startOver')}
                         </button>
                     </div>
+
+                    <div style={{ position: 'absolute', bottom: '10px', right: '15px', opacity: 0.2, fontSize: '10px', pointerEvents: 'none' }}>
+                        v1.2.0-ULTIMATE
+                    </div>
                 </Card>
             </section>
 

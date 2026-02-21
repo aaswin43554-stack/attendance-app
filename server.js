@@ -32,7 +32,7 @@ app.use(express.json());
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", version: "1.1.0-otp-fix" });
+  res.json({ status: "ok", version: "1.2.0-ultimate" });
 });
 
 /**
@@ -115,6 +115,9 @@ const createTransporter = () => {
     port: 465,
     secure: true,
     auth: { user, pass },
+    connectionTimeout: 10000, // 10s timeout to prevent hang
+    greetingTimeout: 5000,
+    socketTimeout: 20000,
   });
 };
 

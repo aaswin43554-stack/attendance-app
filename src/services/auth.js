@@ -82,11 +82,17 @@ export async function sendOTP(email) {
   console.log("🚀 Requesting OTP from:", endpoint);
 
   try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: email.trim() }),
+      signal: controller.signal
     });
+
+    clearTimeout(id);
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -94,8 +100,9 @@ export async function sendOTP(email) {
     }
     return data;
   } catch (error) {
+    if (error.name === 'AbortError') throw new Error("Connection timed out. The server is taking too long to respond.");
     console.error("❌ sendOTP Fetch Error:", error);
-    throw new Error(`Connection error: ${error.message}. Please check if the server is running.`);
+    throw new Error(`Connection error: ${error.message}.`);
   }
 }
 
