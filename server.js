@@ -161,6 +161,8 @@ app.post("/api/send-otp", async (req, res) => {
     if (GOOGLE_SHEETS_API_URL) {
       try {
         console.log(`[AUTH] Attempting to send OTP via GAS proxy for ${cleanEmail}`);
+        console.log(`[AUTH] Using GAS URL: ${GOOGLE_SHEETS_API_URL.substring(0, 30)}...`);
+
         const gasResponse = await fetch(GOOGLE_SHEETS_API_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -171,23 +173,34 @@ app.post("/api/send-otp", async (req, res) => {
           }),
         });
 
-        const gasData = await gasResponse.json().catch(() => ({}));
-        if (gasResponse.ok && (gasData.success || gasData.status === "success")) {
+        const textResponse = await gasResponse.text();
+        let gasData = {};
+        try {
+          gasData = JSON.parse(textResponse);
+        } catch (e) {
+          console.error(`[AUTH] GAS returned non-JSON response: ${textResponse.substring(0, 100)}`);
+          emailErrorMessage = `GAS returned invalid response. Check if script is deployed as web app.`;
+        }
+
+        if (gasResponse.ok && (gasData.success || gasData.status === "success" || gasData.status === "ok")) {
           console.log(`[AUTH] Successfully sent OTP via GAS to ${cleanEmail}`);
           emailSentSuccessfully = true;
-        } else {
-          emailErrorMessage = gasData.error || `GAS Status: ${gasResponse.status}`;
+        } else if (!emailErrorMessage) {
+          emailErrorMessage = gasData.error || gasData.message || `GAS Status: ${gasResponse.status}`;
           console.warn(`[AUTH] GAS Proxy failed to send email: ${emailErrorMessage}`);
         }
       } catch (gasErr) {
-        emailErrorMessage = gasErr.message;
+        emailErrorMessage = `GAS Fetch Error: ${gasErr.message}`;
         console.error(`[AUTH] GAS Proxy Error:`, gasErr.message);
       }
+    } else {
+      emailErrorMessage = "Google Sheets API URL is MISSING in environment variables.";
+      console.warn("[AUTH] GAS Proxy skipped: GOOGLE_SHEETS_API_URL not set.");
     }
 
     // PART 2: Fallback to Nodemailer if GAS fails or is not configured
     if (!emailSentSuccessfully) {
-      console.log(`[AUTH] Falling back to Nodemailer for ${cleanEmail}`);
+      console.log(`[AUTH] Falling back to Nodemailer for ${cleanEmail}. Reason: ${emailErrorMessage}`);
       try {
         const mailOptions = {
           from: `"TronX Labs Support" <${process.env.EMAIL_USER || "rtarunkumar3112@gmail.com"}>`,
@@ -212,7 +225,7 @@ app.post("/api/send-otp", async (req, res) => {
       } catch (mailError) {
         console.error("❌ Nodemailer Failed:", mailError.message);
         return res.status(500).json({
-          error: `Failed to send email. (GAS failure: ${emailErrorMessage}, Nodemailer failure: ${mailError.message}). Please check SMTP/API configuration.`
+          error: `Failed to send email. (GAS error: ${emailErrorMessage} | SMTP error: ${mailError.message}).`
         });
       }
     }
