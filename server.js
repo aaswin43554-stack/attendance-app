@@ -110,13 +110,18 @@ app.post("/api/notify", async (req, res) => {
 const otpStore = new Map();
 
 // Configure Nodemailer Transporter
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+// Use explicit host/port which is more reliable in cloud environments
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true, // Use SSL
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+  });
+};
 
 /**
  * Generate and Send OTP via Nodemailer
@@ -159,11 +164,15 @@ app.post("/api/send-otp", async (req, res) => {
       };
 
       if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        const transporter = createTransporter();
         await transporter.sendMail(mailOptions);
         console.log(`[AUTH] Styled OTP sent to ${cleanEmail}`);
       } else {
-        console.error("❌ SMTP credentials missing in environment. Email not sent.");
-        return res.status(500).json({ error: "Email service not configured. Please contact support." });
+        const missing = [];
+        if (!process.env.EMAIL_USER) missing.push("EMAIL_USER");
+        if (!process.env.EMAIL_PASS) missing.push("EMAIL_PASS");
+        console.error(`❌ SMTP credentials missing in environment: ${missing.join(", ")}`);
+        return res.status(500).json({ error: `Server configuration error: Missing ${missing.join(" and ")}. Please set these in Render Dashboard.` });
       }
     } catch (mailError) {
       console.error("❌ Email Sending Failed:", mailError.message);

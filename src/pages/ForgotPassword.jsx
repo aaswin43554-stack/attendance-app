@@ -60,7 +60,7 @@ export default function ForgotPassword() {
                 showToast(t('otpSent'));
                 setStage('3b');
             } catch (err) {
-                showToast("Failed to send OTP");
+                showToast(err.message || "Failed to send OTP");
             } finally {
                 setLoading(false);
             }
