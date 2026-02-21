@@ -11,7 +11,6 @@ dns.setDefaultResultOrder("ipv4first");
 
 // --- HYPER-ROBUST ENVIRONMENT LOADING ---
 import { config } from "dotenv";
-// Try loading all possible .env files (Silent if they don't exist)
 config();
 config({ path: ".env.local" });
 config({ path: ".env.production" });
@@ -19,322 +18,263 @@ config({ path: ".env.production" });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// DIAGNOSTICS: Log environment status at startup
+// DIAGNOSTICS
 console.log("="?.repeat(50));
 console.log("🚀 SERVER STARTUP DIAGNOSTICS");
 console.log("📍 Node Version:", process.version);
 console.log("📍 Environment:", process.env.NODE_ENV || "development");
-console.log("📍 Keys Found:", Object.keys(process.env).filter(k => k.includes("URL") || k.includes("EMAIL") || k.includes("SHEETS")).join(", "));
 console.log("="?.repeat(50));
 
-// LAZY GAS URL DETECTOR (Call this whenever needed)
 const getSheetsUrl = () => {
   const directMatch = process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
   if (directMatch) return directMatch;
-
-  // Fuzzy search for anything that looks like the spreadsheet API
   const fuzzyKey = Object.keys(process.env).find(k =>
     (k.toUpperCase().includes("SHEETS") && k.toUpperCase().includes("URL")) ||
     (k.toUpperCase().includes("GAS") && k.toUpperCase().includes("URL"))
   );
-
   return fuzzyKey ? process.env[fuzzyKey] : null;
 };
 
-// GLOBAL CONSTANTS FOR ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const GOOGLE_SHEETS_API_URL = getSheetsUrl();
+const otpStore = new Map(); // Memory fallback
+
+// --- SUPABASE BACKEND CLIENT (Admin access for OTPs) ---
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+let supabaseAdmin = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log("✅ Supabase Admin initialized for OTP management");
+  } catch (err) {
+    console.warn("⚠️ Could not initialize Supabase Admin:", err.message);
+  }
+}
+
+/**
+ * Configure Resend Email Helper
+ */
+async function sendEmailViaResend(email, otp) {
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+  if (!RESEND_API_KEY) throw new Error("RESEND_API_KEY missing");
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "TronX Labs <onboarding@resend.dev>",
+      to: [email],
+      subject: "Verification Code - TronX Labs",
+      html: `
+        <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #1e293b;">
+          <h2>Verification Code</h2>
+          <div style="background: #f8fafc; padding: 24px; text-align: center; border-radius: 12px;">
+            <span style="font-size: 32px; font-weight: bold; color: #3b82f6; letter-spacing: 8px;">${otp}</span>
+          </div>
+          <p style="margin-top: 16px;">This code expires in 10 minutes.</p>
+        </div>
+      `,
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || "Resend API error");
+  return data;
+}
 
 // Middleware
-app.use(cors()); // In production, Render often handles this, but explicit is safer
+app.use(cors());
 app.use(express.json());
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", version: "1.2.0-ultimate" });
+  res.json({ status: "ok", version: "1.3.0-resend" });
 });
 
 /**
- * Proxy endpoint for Google Sheets API
+ * Proxy endpoints
  */
 app.post("/api/sheets", async (req, res) => {
   try {
     const currentUrl = getSheetsUrl();
-    if (!currentUrl) {
-      return res.status(500).json({
-        error:
-          "Google Sheets URL not configured. Set GOOGLE_SHEETS_API_URL in Render Environment Variables.",
-      });
-    }
-
+    if (!currentUrl) return res.status(500).json({ error: "GAS URL not set" });
     const response = await fetch(currentUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
-
     const text = await response.text();
-
-    try {
-      return res.json(JSON.parse(text));
-    } catch {
-      return res.send(text);
-    }
+    try { return res.json(JSON.parse(text)); } catch { return res.send(text); }
   } catch (error) {
-    console.error("Error proxying request to Google Sheets:", error);
-    res.status(500).json({
-      error: error.message || "Failed to reach Google Sheets",
-    });
+    res.status(500).json({ error: error.message });
   }
 });
 
-/**
- * Proxy endpoint for notifications (Email/SMS)
- */
 app.post("/api/notify", async (req, res) => {
   try {
-    const { action, email, phone, name, password } = req.body;
-
+    const { action, email, name, password } = req.body;
     if (action === "resetPassword") {
       const currentUrl = getSheetsUrl();
       if (currentUrl) {
-        await fetch(currentUrl, {
+        fetch(currentUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "sendResetEmail",
-            email,
-            name,
-            password,
-          }),
-        });
+          body: JSON.stringify({ action: "sendResetEmail", email, name, password }),
+        }).catch(() => { });
       }
-      console.log(`[NOTIFY] Password reset sent to ${email} and ${phone}`);
       return res.json({ success: true, message: "Reset instructions sent." });
     }
-
     res.status(400).json({ error: "Invalid notify action" });
   } catch (error) {
-    console.error("Notification error:", error);
     res.status(500).json({ error: "Failed to send notification" });
   }
 });
 
-// In-memory storage for OTPs
-const otpStore = new Map();
-
 /**
- * Configure Nodemailer Transporter
- * Falls back to hardcoded credentials if environment variables are missing
- */
-const createTransporter = () => {
-  // Try Environment Vars -> Try Hardcoded Fail-safe
-  const user = process.env.EMAIL_USER || "rtarunkumar3112@gmail.com";
-  const pass = process.env.EMAIL_PASS || "brtzcxgyasptsfmz";
-
-  console.log(`[SMTP] Initializing transporter for ${user}...`);
-
-  return nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false, // Port 587 requires secure: false for STARTTLS
-    auth: { user, pass },
-    connectionTimeout: 60000, // 60s max timeout for slow cloud networks
-    greetingTimeout: 30000,
-    socketTimeout: 60000,
-    // Strict IPv4 bypass for ENETUNREACH
-    lookup: (hostname, options, callback) => {
-      dns.lookup(hostname, { family: 4 }, callback);
-    },
-    tls: {
-      rejectUnauthorized: false,
-      minVersion: 'TLSv1.2'
-    }
-  });
-};
-
-/**
- * Helper: node-fetch with a strict timeout
- */
-async function fetchWithTimeout(url, options, timeoutMs = 8000) {
-  try {
-    const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (err) {
-    if (err.name === 'AbortError') throw new Error(`Timeout after ${timeoutMs}ms`);
-    throw err;
-  }
-}
-
-/**
- * Generate and Send OTP via Nodemailer
+ * Generate and Send OTP
  */
 app.post("/api/send-otp", async (req, res) => {
   const startTime = Date.now();
-  console.log(`[AUTH] [START] Request received for OTP`);
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ ok: false, error: "Email required" });
+
+  const cleanEmail = email.trim().toLowerCase();
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 10 * 60 * 1000;
+
+  console.log(`[AUTH] [START] Request for ${cleanEmail}`);
+
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: "Email required" });
-
-    const cleanEmail = email.trim().toLowerCase();
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Store OTP for 10 minutes
-    otpStore.set(cleanEmail, {
-      otp,
-      expires: Date.now() + 10 * 60 * 1000
-    });
-
-    console.log(`[AUTH] OTP generated for ${cleanEmail}: ${otp}`);
-
-    // PART 1: Try sending via Google Apps Script API (Highly reliable in cloud)
-    let emailSentSuccessfully = false;
-    let emailErrorMessage = "";
-
-    // RE-FETCH URL IN CASE IT WAS LOADED LATE
-    const currentGasUrl = getSheetsUrl();
-
-    if (currentGasUrl) {
-      const gasStartTime = Date.now();
-      try {
-        console.log(`[AUTH] [GAS-PHASE] Attempting delivery (8s limit)...`);
-        const gasResponse = await fetchWithTimeout(currentGasUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "sendOTP", email: cleanEmail, otp: otp }),
-        }, 8000);
-
-        const textResponse = await gasResponse.text();
-        let gasData = {};
-        try { gasData = JSON.parse(textResponse); } catch (e) { }
-
-        if (gasResponse.ok && (gasData.success || gasData.status === "success" || gasData.status === "ok")) {
-          console.log(`[AUTH] Success via GAS-POST after ${Date.now() - gasStartTime}ms`);
-          emailSentSuccessfully = true;
-        } else {
-          console.log(`[AUTH] GAS-POST failed. Trying GAS-GET...`);
-          const getUrl = `${currentGasUrl}${currentGasUrl.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(cleanEmail)}&otp=${otp}`;
-          const getResponse = await fetchWithTimeout(getUrl, {}, 4000); // 4s for GET
-          if (getResponse.ok) {
-            console.log(`[AUTH] Success via GAS-GET after total GAS phase ${Date.now() - gasStartTime}ms`);
-            emailSentSuccessfully = true;
-          } else {
-            emailErrorMessage = gasData.error || gasData.message || `GAS Get Status: ${getResponse.status}`;
-            console.warn(`[AUTH] GAS Proxy (GET) also failed: ${emailErrorMessage}`);
-          }
-        }
-      } catch (err) {
-        console.warn(`[AUTH] GAS Phase timed out or failed after ${Date.now() - gasStartTime}ms: ${err.message}`);
-        emailErrorMessage = `GAS Error: ${err.message}`;
+    // 1. SAVE OTP TO SUPABASE
+    if (supabaseAdmin) {
+      const { error: dbErr } = await supabaseAdmin
+        .from("otps")
+        .upsert({ email: cleanEmail, otp, expires: expiresAt });
+      if (dbErr) {
+        console.error(`[AUTH] DB Store Error:`, dbErr.message);
+        otpStore.set(cleanEmail, { otp, expires: expiresAt });
       }
     } else {
-      emailErrorMessage = "Google Sheets API URL is MISSING in environment variables.";
-      console.warn("[AUTH] GAS Proxy skipped: GOOGLE_SHEETS_API_URL not set.");
+      otpStore.set(cleanEmail, { otp, expires: expiresAt });
     }
 
-    // PART 2: Fallback to Nodemailer (15s limit)
-    if (!emailSentSuccessfully) {
-      const smtpStartTime = Date.now();
-      console.log(`[AUTH] [SMTP-PHASE] Falling back (15s limit). Reason: ${emailErrorMessage}`);
+    let emailSent = false;
+    let deliveryMethod = "Resend";
+
+    // 2. PRIMARY: RESEND API
+    try {
+      await sendEmailViaResend(cleanEmail, otp);
+      console.log(`[AUTH] Success via Resend inside ${Date.now() - startTime}ms`);
+      emailSent = true;
+    } catch (resendErr) {
+      console.warn(`[AUTH] Resend failed, trying fallback SMTP: ${resendErr.message}`);
+      deliveryMethod = "SMTP";
       try {
-        const mailOptions = {
-          from: `"TronX Labs Support" <${process.env.EMAIL_USER || "rtarunkumar3112@gmail.com"}>`,
-          to: cleanEmail,
-          subject: "Your Verification Code - TronX Labs",
-          html: `
-            <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-              <h2 style="color: #1e293b; text-align: center;">Verification Code</h2>
-              <div style="background: #f8fafc; border-radius: 12px; padding: 24px; text-align: center;">
-                <span style="font-size: 42px; font-weight: bold; color: #3b82f6; letter-spacing: 12px;">${otp}</span>
-              </div>
-            </div>
-          `,
-        };
-
-        const transporter = createTransporter();
-        const smtpPromise = transporter.sendMail(mailOptions);
-
-        // Wrap SMTP in a timeout race
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("SMTP Timeout")), 15000));
-        await Promise.race([smtpPromise, timeoutPromise]);
-
-        console.log(`[AUTH] Success via SMTP after ${Date.now() - smtpStartTime}ms`);
-        emailSentSuccessfully = true;
-      } catch (mailError) {
-        console.error(`[AUTH] SMTP Failed/Timed out after ${Date.now() - smtpStartTime}ms:`, mailError.message);
-        return res.status(500).json({
-          error: `Delivery timeout. (GAS: ${emailErrorMessage} | SMTP: ${mailError.message}).`
+        const user = process.env.EMAIL_USER || "rtarunkumar3112@gmail.com";
+        const pass = process.env.EMAIL_PASS || "brtzcxgyasptsfmz";
+        const transporter = nodemailer.createTransport({
+          host: "smtp.gmail.com",
+          port: 587,
+          secure: false,
+          auth: { user, pass },
+          lookup: (hostname, options, callback) => dns.lookup(hostname, { family: 4 }, callback),
+          tls: { rejectUnauthorized: false }
         });
+
+        await Promise.race([
+          transporter.sendMail({
+            from: `"TronX Labs Support" <${user}>`,
+            to: cleanEmail,
+            subject: "Verification Code - TronX Labs",
+            html: `<p>Your code: <b>${otp}</b></p>`
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("SMTP Timeout")), 15000))
+        ]);
+        console.log(`[AUTH] Success via SMTP inside ${Date.now() - startTime}ms`);
+        emailSent = true;
+      } catch (smtpErr) {
+        console.error(`[AUTH] SMTP also failed:`, smtpErr.message);
       }
     }
 
-    console.log(`[AUTH] [FINISH] Total duration: ${Date.now() - startTime}ms`);
+    // 3. NON-BLOCKING GAS LOGGING
+    const currentUrl = getSheetsUrl();
+    if (currentUrl) {
+      fetch(currentUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sendOTP", email: cleanEmail, otp: otp }),
+      }).catch(() => { });
+    }
+
+    if (!emailSent) return res.status(500).json({ ok: false, error: "Delivery failed" });
+
     res.json({
+      ok: true,
       success: true,
-      message: "OTP verification code sent.",
-      otp: otp,
-      duration: Date.now() - startTime
+      message: "OTP sent",
+      duration: Date.now() - startTime,
+      method: deliveryMethod
     });
   } catch (error) {
-    console.error("[AUTH] Fatal Server Error:", error);
-    if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
+    console.error("[AUTH] Fatal Error:", error);
+    if (!res.headersSent) res.status(500).json({ ok: false, error: "Internal error" });
   }
 });
 
 /**
  * Verify OTP
  */
-app.post("/api/verify-otp", (req, res) => {
+app.post("/api/verify-otp", async (req, res) => {
   const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
+  if (!email || !otp) return res.status(400).json({ ok: false, error: "Email and OTP required" });
 
   const cleanEmail = email.trim().toLowerCase();
-  const stored = otpStore.get(cleanEmail);
 
-  if (!stored) return res.status(400).json({ error: "No OTP found. Please request a new one." });
-  if (Date.now() > stored.expires) {
+  try {
+    let storedOtp = null;
+    if (supabaseAdmin) {
+      const { data } = await supabaseAdmin.from("otps").select("*").eq("email", cleanEmail).single();
+      if (data) storedOtp = data;
+    }
+    if (!storedOtp) storedOtp = otpStore.get(cleanEmail);
+
+    if (!storedOtp) return res.status(400).json({ ok: false, error: "No OTP found" });
+    if (Date.now() > storedOtp.expires) {
+      if (supabaseAdmin) await supabaseAdmin.from("otps").delete().eq("email", cleanEmail);
+      otpStore.delete(cleanEmail);
+      return res.status(400).json({ ok: false, error: "OTP has expired" });
+    }
+    if (storedOtp.otp !== otp) return res.status(400).json({ ok: false, error: "Invalid code" });
+
+    if (supabaseAdmin) await supabaseAdmin.from("otps").delete().eq("email", cleanEmail).catch(() => { });
     otpStore.delete(cleanEmail);
-    return res.status(400).json({ error: "OTP has expired." });
-  }
-  if (stored.otp !== otp) return res.status(400).json({ error: "Invalid OTP code." });
 
-  // Clear OTP after successful verification
-  otpStore.delete(cleanEmail);
-  res.json({ success: true, message: "OTP verified" });
+    res.json({ ok: true, message: "OTP verified" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: "Verification failed" });
+  }
 });
 
-// ✅ Serve Vite build output (dist)
+// Serve static build
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
-// ✅ SPA fallback
+// SPA fallback
 app.use((req, res, next) => {
   if (req.path.startsWith("/api") || req.path === "/health") return next();
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
-// Start server
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server is listening at http://localhost:${PORT}`);
 });
 
-server.on("error", (err) => {
-  if (err.code === "EADDRINUSE") {
-    console.error(`❌ Port ${PORT} is busy.`);
-  } else {
-    console.error("❌ Server Error:", err);
-  }
-  process.exit(1);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("💥 Uncaught Exception:", err);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
-});
+process.on("uncaughtException", (err) => console.error("💥 Uncaught Exception:", err));
+process.on("unhandledRejection", (reason, p) => console.error("💥 Unhandled Rejection at:", p, "reason:", reason));
