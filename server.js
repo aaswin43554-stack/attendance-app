@@ -22,9 +22,28 @@ console.log("📍 Server Port:", PORT);
 console.log("📧 Email User Configured:", process.env.EMAIL_USER ? "Yes" : "No");
 
 // Use GOOGLE_SHEETS_API_URL in Render (recommended).
-// Keep VITE_GOOGLE_SHEETS_API_URL as fallback so existing code still works.
-const GOOGLE_SHEETS_API_URL =
-  process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
+// UNIVERSAL DETECTOR: Check multiple common names or any key containing 'SHEETS' and 'API'
+const getSheetsUrl = () => {
+  // 1. Check direct standard names
+  const directMatch = process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
+  if (directMatch) return directMatch;
+
+  // 2. Search all keys for something that looks like the API URL
+  const allKeys = Object.keys(process.env);
+  const fuzzyMatchKey = allKeys.find(k =>
+    (k.includes("SHEETS") && k.includes("API")) ||
+    (k.includes("GOOGLE") && k.includes("URL"))
+  );
+
+  if (fuzzyMatchKey) {
+    console.log(`[AUTH] Magic detected GAS URL from key: ${fuzzyMatchKey}`);
+    return process.env[fuzzyMatchKey];
+  }
+
+  return null;
+};
+
+const GOOGLE_SHEETS_API_URL = getSheetsUrl();
 
 // __dirname for ES Modules
 const __filename = fileURLToPath(import.meta.url);
