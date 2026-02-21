@@ -4,6 +4,10 @@ import fetch from "node-fetch";
 import nodemailer from "nodemailer";
 import path from "path";
 import { fileURLToPath } from "url";
+import dns from "dns";
+
+// Force IPv4 for SMTP connections to avoid ENETUNREACH on IPv6-only environments
+dns.setDefaultResultOrder("ipv4first");
 
 // Load .env only in local development
 if (process.env.NODE_ENV !== "production") {
