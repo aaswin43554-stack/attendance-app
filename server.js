@@ -19,26 +19,43 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- SUPABASE BACKEND CLIENT (Admin access for OTPs) ---
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+// Note: Backend requires SUPABASE_SERVICE_ROLE_KEY!
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// STARTUP DIAGNOSTICS
+console.log("="?.repeat(50));
+console.log("🚀 BULLETPROOF SERVER STARTUP");
+if (!SUPABASE_URL) console.error("❌ MISSING: SUPABASE_URL");
+if (!SUPABASE_KEY) console.error("❌ MISSING: SUPABASE_SERVICE_ROLE_KEY");
+if (!process.env.RESEND_API_KEY) console.error("❌ MISSING: RESEND_API_KEY");
+console.log("="?.repeat(50));
+
+/**
+ * Initialize Supabase Admin Client
+ */
 let supabaseAdmin = null;
-if (SUPABASE_URL && SUPABASE_KEY) {
-  try {
-    const { createClient } = await import("@supabase/supabase-js");
-    supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY);
-    console.log("✅ Supabase Admin initialized for OTP management");
-  } catch (err) {
-    console.error("❌ Supabase Admin Init Error:", err.message);
+const initSupabase = async () => {
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY);
+      console.log("✅ Supabase Admin initialized successfully");
+    } catch (err) {
+      console.error("❌ Failed to init Supabase Admin:", err.message);
+    }
   }
-}
+};
+await initSupabase();
 
 /**
  * Resend Email API Helper (8s Hard Timeout)
  */
 async function sendEmailViaResend(email, otp) {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) throw new Error("RESEND_API_KEY missing");
+  if (!apiKey) throw new Error("RESEND_API_KEY missing. Set it in Render Environment Variables.");
+
+  const fromEmail = process.env.RESEND_FROM_EMAIL || "TronX Labs <no-reply@resend.dev>";
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 8000);
@@ -52,24 +69,24 @@ async function sendEmailViaResend(email, otp) {
       },
       signal: controller.signal,
       body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || "TronX Labs <no-reply@resend.dev>",
+        from: fromEmail,
         to: [email],
         subject: "Verification Code - TronX Labs",
         html: `
           <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #1e293b; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-            <h2 style="text-align: center;">Verification Code</h2>
-            <p>Use the code below to verify your identity. This code expires in 10 minutes.</p>
-            <div style="background: #f8fafc; padding: 24px; text-align: center; border-radius: 12px; margin: 20px 0;">
-              <span style="font-size: 36px; font-weight: bold; color: #3b82f6; letter-spacing: 10px;">${otp}</span>
+            <h2 style="text-align: center; color: #3b82f6;">Verify Your Identity</h2>
+            <p>Use the code below to complete your password reset request. This code will expire in 10 minutes.</p>
+            <div style="background: #f8fafc; padding: 32px; text-align: center; border-radius: 12px; margin: 24px 0;">
+              <span style="font-size: 42px; font-weight: bold; color: #1e293b; letter-spacing: 12px;">${otp}</span>
             </div>
-            <p style="font-size: 12px; color: #64748b; text-align: center;">If you didn't request this code, please ignore this email.</p>
+            <p style="font-size: 13px; color: #64748b; text-align: center;">This is an automated message. If you didn't request this code, please ignore this email.</p>
           </div>
         `,
       }),
     });
 
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Resend API error");
+    if (!response.ok) throw new Error(data.message || `Resend Error: ${response.status}`);
     return data;
   } finally {
     clearTimeout(timeoutId);
@@ -87,56 +104,60 @@ app.use(express.json());
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", version: "2.0.0-bulletproof" });
+  res.json({
+    status: "ok",
+    db: !!supabaseAdmin,
+    resend: !!process.env.RESEND_API_KEY
+  });
 });
 
 /**
- * OTP ENDPOINTS (STRICT IMPLEMENTATION)
+ * OTP ENDPOINTS
  */
 
-// Generate and Send OTP
+// 1. Generate and Send OTP
 app.post("/api/auth/send-reset-otp", async (req, res) => {
-  const startTime = Date.now();
   const { email } = req.body;
-
-  if (!email) return res.status(400).json({ ok: false, error: "Email required" });
-  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured" });
+  if (!email) return res.status(400).json({ ok: false, error: "Email is required" });
+  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured. Check SUPABASE_URL and SERVICE_ROLE_KEY." });
 
   const cleanEmail = email.trim().toLowerCase();
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const hashedOtp = hashOTP(otp);
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
-  console.log(`[AUTH] [OTP-SEND] Request for ${cleanEmail}`);
+  console.log(`[AUTH] Generating OTP for ${cleanEmail}`);
 
   try {
-    // 1. Store hashed OTP in Supabase
+    // Save to Supabase (Upsert to handle re-sends)
     const { error: dbErr } = await supabaseAdmin
       .from("password_reset_otps")
-      .upsert({ email: cleanEmail, otp_hash: hashedOtp, expires_at: expiresAt });
+      .upsert({
+        email: cleanEmail,
+        otp_hash: hashedOtp,
+        expires_at: expiresAt
+      }, { onConflict: 'email' });
 
-    if (dbErr) throw new Error(`DB Error: ${dbErr.message}`);
+    if (dbErr) throw new Error(`Database Error: ${dbErr.message}`);
 
-    // 2. Send via Resend with 8s timeout
+    // Send via Resend with timeout
     await sendEmailViaResend(cleanEmail, otp);
 
-    console.log(`[AUTH] [OTP-SUCCESS] Sent in ${Date.now() - startTime}ms`);
     return res.json({ ok: true, message: "OTP sent successfully" });
-
   } catch (error) {
-    console.error(`[AUTH] [OTP-ERROR]`, error.message);
+    console.error(`[AUTH] OTP Error:`, error.message);
     return res.status(500).json({ ok: false, error: error.message });
   }
 });
 
-// Verify OTP
+// 2. Verify OTP
 app.post("/api/auth/verify-reset-otp", async (req, res) => {
   const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ ok: false, error: "Email and OTP required" });
+  if (!email || !otp) return res.status(400).json({ ok: false, error: "Email and OTP are required" });
   if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured" });
 
   const cleanEmail = email.trim().toLowerCase();
-  const hashedInput = hashOTP(otp);
+  const hashedInput = hashOTP(otp.trim());
 
   try {
     const { data, error } = await supabaseAdmin
@@ -145,53 +166,44 @@ app.post("/api/auth/verify-reset-otp", async (req, res) => {
       .eq("email", cleanEmail)
       .single();
 
-    if (error || !data) return res.status(400).json({ ok: false, error: "Invalid or expired code" });
+    if (error || !data) return res.status(400).json({ ok: false, error: "No valid code found for this email" });
 
-    // Check expiry
+    // Expiry check
     if (new Date() > new Date(data.expires_at)) {
       await supabaseAdmin.from("password_reset_otps").delete().eq("email", cleanEmail);
-      return res.status(400).json({ ok: false, error: "Code has expired" });
+      return res.status(400).json({ ok: false, error: "Code has expired. Please request a new one." });
     }
 
-    // Check hash match
-    if (data.otp_hash !== hashedInput) return res.status(400).json({ ok: false, error: "Incorrect code" });
+    // Hash check
+    if (data.otp_hash !== hashedInput) {
+      return res.status(400).json({ ok: false, error: "Incorrect verification code" });
+    }
 
-    // Success: Delete the code after use
+    // Success: Delete code
     await supabaseAdmin.from("password_reset_otps").delete().eq("email", cleanEmail).catch(() => { });
 
-    return res.json({ ok: true, message: "OTP verified" });
+    return res.json({ ok: true, message: "Identity verified" });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: "Verification failed" });
+    return res.status(500).json({ ok: false, error: "Verification system error" });
   }
 });
 
 /**
- * LEGACY FALLBACKS (Redirects to new endpoints)
+ * LEGACY FALLBACKS
  */
-app.post("/api/send-otp", (req, res) => {
-  console.log("[LEGACY] Redirecting /api/send-otp -> /api/auth/send-reset-otp");
-  res.redirect(307, "/api/auth/send-reset-otp");
-});
+app.post("/api/send-otp", (req, res) => res.redirect(307, "/api/auth/send-reset-otp"));
+app.post("/api/verify-otp", (req, res) => res.redirect(307, "/api/auth/verify-reset-otp"));
 
-app.post("/api/verify-otp", (req, res) => {
-  console.log("[LEGACY] Redirecting /api/verify-otp -> /api/auth/verify-reset-otp");
-  res.redirect(307, "/api/auth/verify-reset-otp");
-});
-
-// Serve frontend static build
+// Static File Serving (Dist)
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
-// SPA fallback for routing
+// SPA Routing
 app.use((req, res, next) => {
   if (req.path.startsWith("/api") || req.path === "/health") return next();
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
-// Start server
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Bulletproof Server listening at http://localhost:${PORT}`);
+  console.log(`🚀 TronX Bulletproof Server listening on port ${PORT}`);
 });
-
-process.on("uncaughtException", (err) => console.error("💥 Uncaught Exception:", err));
-process.on("unhandledRejection", (reason) => console.error("💥 Unhandled Rejection:", reason));
