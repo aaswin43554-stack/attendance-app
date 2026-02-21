@@ -69,7 +69,14 @@ export async function verifyLastPassword(email, lastPass) {
  * Sends a custom OTP via our backend server
  */
 export async function sendOTP(email) {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+  let backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+
+  // If running on a live domain (not localhost) and backendUrl points to localhost,
+  // use relative path to ensure we hit the same Render server.
+  if (window.location.hostname !== "localhost" && backendUrl.includes("localhost")) {
+    backendUrl = ""; // Use relative path
+  }
+
   const response = await fetch(`${backendUrl}/api/send-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -85,7 +92,13 @@ export async function sendOTP(email) {
  * Verifies the custom OTP via our backend
  */
 export async function verifyOTPCode(email, otp) {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+  let backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+
+  // Absolute to relative fallback for production
+  if (window.location.hostname !== "localhost" && backendUrl.includes("localhost")) {
+    backendUrl = "";
+  }
+
   const response = await fetch(`${backendUrl}/api/verify-otp`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

@@ -27,7 +27,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Middleware
-app.use(cors());
+app.use(cors()); // In production, Render often handles this, but explicit is safer
 app.use(express.json());
 
 // Health check
