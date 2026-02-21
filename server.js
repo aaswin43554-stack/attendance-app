@@ -32,12 +32,11 @@ app.use(express.json());
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", version: "1.1.0-otp-fix" });
 });
 
 /**
  * Proxy endpoint for Google Sheets API
- * POST /api/sheets
  */
 app.post("/api/sheets", async (req, res) => {
   try {
@@ -56,7 +55,6 @@ app.post("/api/sheets", async (req, res) => {
 
     const text = await response.text();
 
-    // Try JSON first, else return text
     try {
       return res.json(JSON.parse(text));
     } catch {
@@ -72,14 +70,12 @@ app.post("/api/sheets", async (req, res) => {
 
 /**
  * Proxy endpoint for notifications (Email/SMS)
- * POST /api/notify
  */
 app.post("/api/notify", async (req, res) => {
   try {
     const { action, email, phone, name, password } = req.body;
 
     if (action === "resetPassword") {
-      // Forward to Google Apps Script for Email
       if (GOOGLE_SHEETS_API_URL) {
         await fetch(GOOGLE_SHEETS_API_URL, {
           method: "POST",
@@ -92,10 +88,7 @@ app.post("/api/notify", async (req, res) => {
           }),
         });
       }
-
-      // Placeholder for SMS/n8n/Twilio
       console.log(`[NOTIFY] Password reset sent to ${email} and ${phone}`);
-
       return res.json({ success: true, message: "Reset instructions sent." });
     }
 
@@ -106,20 +99,21 @@ app.post("/api/notify", async (req, res) => {
   }
 });
 
-// In-memory storage for OTPs (In production, use Redis or a Database)
+// In-memory storage for OTPs
 const otpStore = new Map();
 
-// Configure Nodemailer Transporter
-// Use explicit host/port which is more reliable in cloud environments
+/**
+ * Configure Nodemailer Transporter
+ * Falls back to hardcoded credentials if environment variables are missing
+ */
 const createTransporter = () => {
-  // Fallback credentials if environment variables are missing
   const user = process.env.EMAIL_USER || "rtarunkumar3112@gmail.com";
   const pass = process.env.EMAIL_PASS || "brtzcxgyasptsfmz";
 
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
     port: 465,
-    secure: true, // Use SSL
+    secure: true,
     auth: { user, pass },
   });
 };
@@ -143,13 +137,12 @@ app.post("/api/send-otp", async (req, res) => {
       expires: Date.now() + 10 * 60 * 1000
     });
 
-    // For development, we log the OTP to the console so it works even if email fails
-    console.log(`[DEVELOPMENT] Valid OTP for ${cleanEmail}: ${otp}`);
+    console.log(`[AUTH] Generating OTP for ${cleanEmail}: ${otp}`);
 
     // Attempt to send email
     try {
       const mailOptions = {
-        from: `"TronX Labs Support" <${process.env.EMAIL_USER || "no-reply@tronxlabs.com"}>`,
+        from: `"TronX Labs Support" <${process.env.EMAIL_USER || "rtarunkumar3112@gmail.com"}>`,
         to: cleanEmail,
         subject: "Your Verification Code - TronX Labs",
         html: `
@@ -164,20 +157,12 @@ app.post("/api/send-otp", async (req, res) => {
         `,
       };
 
-      const user = process.env.EMAIL_USER || "rtarunkumar3112@gmail.com";
-      const pass = process.env.EMAIL_PASS || "brtzcxgyasptsfmz";
-
-      if (user && pass) {
-        const transporter = createTransporter();
-        await transporter.sendMail(mailOptions);
-        console.log(`[AUTH] Styled OTP sent to ${cleanEmail}`);
-      } else {
-        console.error("❌ SMTP credentials missing.");
-        return res.status(500).json({ error: "Server configuration error. Email service not ready." });
-      }
+      const transporter = createTransporter();
+      await transporter.sendMail(mailOptions);
+      console.log(`[AUTH] Styled OTP sent to ${cleanEmail}`);
     } catch (mailError) {
       console.error("❌ Email Sending Failed:", mailError.message);
-      return res.status(500).json({ error: `Failed to send email: ${mailError.message}` });
+      return res.status(500).json({ error: `Failed to send email: ${mailError.message}. Check SMTP configuration.` });
     }
 
     res.json({ success: true, message: "OTP verification code sent to your email." });
@@ -192,17 +177,20 @@ app.post("/api/send-otp", async (req, res) => {
  */
 app.post("/api/verify-otp", (req, res) => {
   const { email, otp } = req.body;
-  const stored = otpStore.get(email.toLowerCase());
+  if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
+
+  const cleanEmail = email.trim().toLowerCase();
+  const stored = otpStore.get(cleanEmail);
 
   if (!stored) return res.status(400).json({ error: "No OTP found. Please request a new one." });
   if (Date.now() > stored.expires) {
-    otpStore.delete(email.toLowerCase());
+    otpStore.delete(cleanEmail);
     return res.status(400).json({ error: "OTP has expired." });
   }
   if (stored.otp !== otp) return res.status(400).json({ error: "Invalid OTP code." });
 
   // Clear OTP after successful verification
-  otpStore.delete(email.toLowerCase());
+  otpStore.delete(cleanEmail);
   res.json({ success: true, message: "OTP verified" });
 });
 
@@ -210,37 +198,26 @@ app.post("/api/verify-otp", (req, res) => {
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
-// ✅ SPA fallback WITHOUT app.get("*") or app.get("/*") (fixes your Render crash)
+// ✅ SPA fallback
 app.use((req, res, next) => {
-  // Let API routes pass through
   if (req.path.startsWith("/api") || req.path === "/health") return next();
-
-  // Serve the React/Vite app for all other routes
   return res.sendFile(path.join(distPath, "index.html"));
 });
 
 // Start server
 const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server is listening at http://localhost:${PORT}`);
-  console.log(`📧 Email User: ${process.env.EMAIL_USER ? process.env.EMAIL_USER : "Not Configured"}`);
-  console.log(`📊 Google Sheets API: ${GOOGLE_SHEETS_API_URL ? "Connected" : "Not Configured"}`);
 });
 
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
-    console.error(`❌ Port ${PORT} is busy. Please kill the process on this port or change it in server.js`);
+    console.error(`❌ Port ${PORT} is busy.`);
   } else {
     console.error("❌ Server Error:", err);
   }
   process.exit(1);
 });
 
-// Prevent process from exiting (Health check)
-setInterval(() => {
-  // console.log("💓 Server heartbeat...");
-}, 300000);
-
-// Global Error Handling
 process.on("uncaughtException", (err) => {
   console.error("💥 Uncaught Exception:", err);
 });
