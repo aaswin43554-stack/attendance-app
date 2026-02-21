@@ -154,30 +154,67 @@ app.post("/api/send-otp", async (req, res) => {
 
     console.log(`[AUTH] Generating OTP for ${cleanEmail}: ${otp}`);
 
-    // Attempt to send email
-    try {
-      const mailOptions = {
-        from: `"TronX Labs Support" <${process.env.EMAIL_USER || "rtarunkumar3112@gmail.com"}>`,
-        to: cleanEmail,
-        subject: "Your Verification Code - TronX Labs",
-        html: `
-          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
-            <h2 style="color: #1e293b; text-align: center; margin-bottom: 8px;">Verification Code</h2>
-            <p style="color: #64748b; text-align: center; font-size: 16px;">Use the code below to reset your password.</p>
-            <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
-              <span style="font-size: 42px; font-weight: bold; color: #3b82f6; letter-spacing: 12px; font-family: monospace;">${otp}</span>
-            </div>
-            <p style="color: #94a3b8; font-size: 14px; text-align: center;">This code will expire in 10 minutes. If you didn't request this, please ignore this email.</p>
-          </div>
-        `,
-      };
+    // PART 1: Try sending via Google Apps Script API (Highly reliable in cloud)
+    let emailSentSuccessfully = false;
+    let emailErrorMessage = "";
 
-      const transporter = createTransporter();
-      await transporter.sendMail(mailOptions);
-      console.log(`[AUTH] Styled OTP sent to ${cleanEmail}`);
-    } catch (mailError) {
-      console.error("❌ Email Sending Failed:", mailError.message);
-      return res.status(500).json({ error: `Failed to send email: ${mailError.message}. Check SMTP configuration.` });
+    if (GOOGLE_SHEETS_API_URL) {
+      try {
+        console.log(`[AUTH] Attempting to send OTP via GAS proxy for ${cleanEmail}`);
+        const gasResponse = await fetch(GOOGLE_SHEETS_API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "sendOTP",
+            email: cleanEmail,
+            otp: otp
+          }),
+        });
+
+        const gasData = await gasResponse.json().catch(() => ({}));
+        if (gasResponse.ok && (gasData.success || gasData.status === "success")) {
+          console.log(`[AUTH] Successfully sent OTP via GAS to ${cleanEmail}`);
+          emailSentSuccessfully = true;
+        } else {
+          emailErrorMessage = gasData.error || `GAS Status: ${gasResponse.status}`;
+          console.warn(`[AUTH] GAS Proxy failed to send email: ${emailErrorMessage}`);
+        }
+      } catch (gasErr) {
+        emailErrorMessage = gasErr.message;
+        console.error(`[AUTH] GAS Proxy Error:`, gasErr.message);
+      }
+    }
+
+    // PART 2: Fallback to Nodemailer if GAS fails or is not configured
+    if (!emailSentSuccessfully) {
+      console.log(`[AUTH] Falling back to Nodemailer for ${cleanEmail}`);
+      try {
+        const mailOptions = {
+          from: `"TronX Labs Support" <${process.env.EMAIL_USER || "rtarunkumar3112@gmail.com"}>`,
+          to: cleanEmail,
+          subject: "Your Verification Code - TronX Labs",
+          html: `
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+              <h2 style="color: #1e293b; text-align: center; margin-bottom: 8px;">Verification Code</h2>
+              <p style="color: #64748b; text-align: center; font-size: 16px;">Use the code below to reset your password.</p>
+              <div style="background: #f8fafc; border-radius: 12px; padding: 24px; margin: 24px 0; text-align: center;">
+                <span style="font-size: 42px; font-weight: bold; color: #3b82f6; letter-spacing: 12px; font-family: monospace;">${otp}</span>
+              </div>
+              <p style="color: #94a3b8; font-size: 14px; text-align: center;">This code will expire in 10 minutes. If you didn't request this, please ignore this email.</p>
+            </div>
+          `,
+        };
+
+        const transporter = createTransporter();
+        await transporter.sendMail(mailOptions);
+        console.log(`[AUTH] Nodemailer OTP sent to ${cleanEmail}`);
+        emailSentSuccessfully = true;
+      } catch (mailError) {
+        console.error("❌ Nodemailer Failed:", mailError.message);
+        return res.status(500).json({
+          error: `Failed to send email. (GAS failure: ${emailErrorMessage}, Nodemailer failure: ${mailError.message}). Please check SMTP/API configuration.`
+        });
+      }
     }
 
     res.json({ success: true, message: "OTP verification code sent to your email." });
