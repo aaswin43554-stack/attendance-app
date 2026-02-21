@@ -83,7 +83,7 @@ export async function sendOTP(email) {
 
   try {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 35000); // 35s timeout
+    const id = setTimeout(() => controller.abort(), 45000); // 45s timeout
 
     const response = await fetch(endpoint, {
       method: "POST",

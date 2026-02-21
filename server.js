@@ -116,16 +116,20 @@ const createTransporter = () => {
 
   return nodemailer.createTransport({
     host: "smtp.gmail.com",
-    port: 465,
-    secure: true, // Use SSL/TLS
+    port: 587,
+    secure: false, // Use STARTTLS
     auth: { user, pass },
-    connectionTimeout: 30000, // 30s timeout
-    greetingTimeout: 15000,
-    socketTimeout: 45000,
+    connectionTimeout: 40000, // 40s timeout
+    greetingTimeout: 20000,
+    socketTimeout: 50000,
     // Aggressive IPv4 enforcement: override DNS lookup
     lookup: (hostname, options, callback) => {
       dns.lookup(hostname, { family: 4 }, callback);
     },
+    tls: {
+      rejectUnauthorized: false, // Allow self-signed or non-standard certs often found in cloud proxies
+      minVersion: 'TLSv1.2'
+    }
   });
 };
 
