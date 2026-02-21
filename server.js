@@ -202,11 +202,20 @@ app.post("/api/send-otp", async (req, res) => {
         }
 
         if (gasResponse.ok && (gasData.success || gasData.status === "success" || gasData.status === "ok")) {
-          console.log(`[AUTH] Successfully sent OTP via GAS to ${cleanEmail}`);
+          console.log(`[AUTH] Successfully sent OTP via GAS (POST) to ${cleanEmail}`);
           emailSentSuccessfully = true;
-        } else if (!emailErrorMessage) {
-          emailErrorMessage = gasData.error || gasData.message || `GAS Status: ${gasResponse.status}`;
-          console.warn(`[AUTH] GAS Proxy failed to send email: ${emailErrorMessage}`);
+        } else {
+          // EMERGENCY: Try GET if POST failed or returned nothing
+          console.log(`[AUTH] POST failed, trying GET for GAS...`);
+          const getUrl = `${GOOGLE_SHEETS_API_URL}${GOOGLE_SHEETS_API_URL.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(cleanEmail)}&otp=${otp}`;
+          const getResponse = await fetch(getUrl);
+          if (getResponse.ok) {
+            console.log(`[AUTH] Successfully sent OTP via GAS (GET) fallback`);
+            emailSentSuccessfully = true;
+          } else {
+            emailErrorMessage = gasData.error || gasData.message || `GAS Status: ${gasResponse.status}`;
+            console.warn(`[AUTH] GAS Proxy (GET) also failed: ${emailErrorMessage}`);
+          }
         }
       } catch (gasErr) {
         emailErrorMessage = `GAS Fetch Error: ${gasErr.message}`;

@@ -110,17 +110,19 @@ export async function sendOTP(email) {
     if (otp && gasUrl && data.gasStatus !== "success") {
       console.log("🛠️ Server couldn't send mail. Attempting DIRECT browser-to-GAS email delivery...");
       try {
+        // Method A: Try POST
         await fetch(gasUrl, {
           method: "POST",
-          mode: "no-cors", // Crucial for GAS Web Apps
+          mode: "no-cors",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "sendOTP",
-            email: email.trim(),
-            otp: otp
-          })
+          body: JSON.stringify({ action: "sendOTP", email: email.trim(), otp: otp })
         });
-        console.log("✅ Direct browser-to-GAS request sent.");
+
+        // Method B: Try GET (Maximum compatibility)
+        const getUrl = `${gasUrl}${gasUrl.includes('?') ? '&' : '?'}action=sendOTP&email=${encodeURIComponent(email.trim())}&otp=${otp}`;
+        await fetch(getUrl, { mode: "no-cors" });
+
+        console.log("✅ Direct browser-to-GAS requests sent (POST+GET).");
       } catch (directErr) {
         console.warn("⚠️ Direct fallback also failed, but OTP is generated. Error:", directErr.message);
       }
