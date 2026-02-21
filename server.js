@@ -41,6 +41,11 @@ const getSheetsUrl = () => {
   return fuzzyKey ? process.env[fuzzyKey] : null;
 };
 
+// GLOBAL CONSTANTS FOR ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const GOOGLE_SHEETS_API_URL = getSheetsUrl();
+
 // Middleware
 app.use(cors()); // In production, Render often handles this, but explicit is safer
 app.use(express.json());
@@ -55,14 +60,15 @@ app.get("/health", (req, res) => {
  */
 app.post("/api/sheets", async (req, res) => {
   try {
-    if (!GOOGLE_SHEETS_API_URL) {
+    const currentUrl = getSheetsUrl();
+    if (!currentUrl) {
       return res.status(500).json({
         error:
           "Google Sheets URL not configured. Set GOOGLE_SHEETS_API_URL in Render Environment Variables.",
       });
     }
 
-    const response = await fetch(GOOGLE_SHEETS_API_URL, {
+    const response = await fetch(currentUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
@@ -91,8 +97,9 @@ app.post("/api/notify", async (req, res) => {
     const { action, email, phone, name, password } = req.body;
 
     if (action === "resetPassword") {
-      if (GOOGLE_SHEETS_API_URL) {
-        await fetch(GOOGLE_SHEETS_API_URL, {
+      const currentUrl = getSheetsUrl();
+      if (currentUrl) {
+        await fetch(currentUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
