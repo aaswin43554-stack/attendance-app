@@ -274,13 +274,21 @@ app.post("/api/auth/verify-reset", async (req, res) => {
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
-// Fallback all other routes to index.html for SPA
-// Using '/*' instead of '*' to avoid PathError on newer Express versions
-app.get("/*", (req, res) => {
+// Fallback all other non-API routes to index.html for SPA support
+// This middleware-based approach avoids PathErrors on newer Express versions
+app.use((req, res, next) => {
+  // If the request is for an API route or health check that wasn't handled, return 404
   if (req.path.startsWith("/api") || req.path === "/health") {
-    return res.status(404).json({ error: "API route not found" });
+    return res.status(404).json({ error: "API endpoint not found" });
   }
-  res.sendFile(path.join(distPath, "index.html"));
+
+  // Otherwise, serve index.html for SPA routing support
+  res.sendFile(path.join(distPath, "index.html"), (err) => {
+    if (err) {
+      // If index.html is missing (e.g. build failed), don't crash the server
+      res.status(404).send("Frontend build not found. Please run 'npm run build'.");
+    }
+  });
 });
 
 // 7. START SERVER
