@@ -8,97 +8,47 @@ import bcrypt from "bcryptjs";
 
 // --- HYPER-ROBUST ENVIRONMENT LOADING ---
 import { config } from "dotenv";
-config();
 config({ path: ".env.local" });
-config({ path: ".env.production" });
+config(); // Fallback to .env
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// GLOBAL CONSTANTS FOR ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// --- SUPABASE BACKEND CLIENT (Admin access for OTPs) ---
-// Note: Backend requires SUPABASE_SERVICE_ROLE_KEY!
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-// STARTUP DIAGNOSTICS
-console.log("="?.repeat(50));
-console.log("🚀 BULLETPROOF SERVER STARTUP");
-console.log("Mode: Client-side Native Reset Preferred");
-if (!SUPABASE_URL) console.warn("⚠️ WARNING: SUPABASE_URL missing");
-if (!SUPABASE_KEY) console.warn("ℹ️ INFO: SUPABASE_SERVICE_ROLE_KEY missing (Backend OTP disabled)");
-if (!process.env.RESEND_API_KEY) console.warn("ℹ️ INFO: RESEND_API_KEY missing (Backend Email disabled)");
-console.log("="?.repeat(50));
-
-/**
- * Initialize Supabase Admin Client
- */
-let supabaseAdmin = null;
-const initSupabase = async () => {
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    try {
-      const { createClient } = await import("@supabase/supabase-js");
-      supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY);
-      console.log("✅ Supabase Admin initialized successfully");
-    } catch (err) {
-      console.error("❌ Failed to init Supabase Admin:", err.message);
+// Critical Startup Validation
+const REQUIRED_ENV = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RESEND_API_KEY"];
+REQUIRED_ENV.forEach(key => {
+  if (!process.env[key]) {
+    console.error(`❌ CRITICAL ERROR: Missing environment variable: ${key}`);
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(`CRITICAL: Missing required environment variable ${key}`);
     }
   }
-};
-await initSupabase();
+});
 
-/**
- * Resend Email API Helper (8s Hard Timeout)
- */
-async function sendEmailViaResend(email, otp) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) throw new Error("RESEND_API_KEY missing. Set it in Render Environment Variables.");
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // MUST use service_role for admin tasks
+const isServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "TronX Labs <no-reply@resend.dev>";
+const { createClient } = await import("@supabase/supabase-js");
+const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+  auth: { autoRefreshToken: false, persistSession: false }
+});
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+console.log(`[SYS] Supabase Admin Initialized. Service Role: ${isServiceRole}`);
 
-  try {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [email],
-        subject: "Verification Code - TronX Labs",
-        html: `
-          <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #1e293b; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
-            <h2 style="text-align: center; color: #3b82f6;">Verify Your Identity</h2>
-            <p>Use the code below to complete your password reset request. This code will expire in 10 minutes.</p>
-            <div style="background: #f8fafc; padding: 32px; text-align: center; border-radius: 12px; margin: 24px 0;">
-              <span style="font-size: 42px; font-weight: bold; color: #1e293b; letter-spacing: 12px;">${otp}</span>
-            </div>
-            <p style="font-size: 13px; color: #64748b; text-align: center;">This is an automated message. If you didn't request this code, please ignore this email.</p>
-          </div>
-        `,
-      }),
-    });
+// Helper for strict email normalization
+const normalizeEmail = (e) => String(e || "").trim().toLowerCase();
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || `Resend Error: ${response.status}`);
-    return data;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+// Simple in-memory rate limiting (Resets on server restart)
+const resetRateLimits = new Map();
+function isRateLimited(email) {
+  const now = Date.now();
+  const limit = 3; // 3 requests
+  const timeframe = 60 * 60 * 1000; // per hour
+  const history = resetRateLimits.get(email) || [];
+  const recentRequests = history.filter(time => now - time < timeframe);
+  if (recentRequests.length >= limit) return true;
+  recentRequests.push(now);
+  resetRateLimits.set(email, recentRequests);
+  return false;
 }
-
-/**
- * Hashing Helper (SHA-256)
- */
-const hashOTP = (otp) => crypto.createHash("sha256").update(otp).digest("hex");
 
 // Middleware
 app.use(cors());
@@ -109,55 +59,38 @@ app.get("/health", (req, res) => {
   res.json({
     status: "ok",
     db: !!supabaseAdmin,
+    isServiceRole,
     resend: !!process.env.RESEND_API_KEY
   });
 });
 
 /**
  * CUSTOM OTP PASSWORD RESET FLOW
- * Bypasses Supabase native email delivery
  */
-
-// Simple in-memory rate limiting (Resets on server restart, fine for this app)
-const resetRateLimits = new Map();
-
-function isRateLimited(email) {
-  const now = Date.now();
-  const limit = 3; // 3 requests
-  const timeframe = 60 * 60 * 1000; // per hour
-
-  const history = resetRateLimits.get(email) || [];
-  const recentRequests = history.filter(time => now - time < timeframe);
-
-  if (recentRequests.length >= limit) return true;
-
-  recentRequests.push(now);
-  resetRateLimits.set(email, recentRequests);
-  return false;
-}
 
 // 1. Request Reset OTP
 app.post("/api/auth/request-reset", async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ ok: false, error: "Email is required" });
+  const { email: rawEmail } = req.body;
+  const cleanEmail = normalizeEmail(rawEmail);
+
+  if (!cleanEmail) return res.status(400).json({ ok: false, error: "Email is required" });
   if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured" });
 
-  const cleanEmail = email.trim().toLowerCase();
+  console.log(`[DEBUG-RESET] Request for: "${rawEmail}" -> Normalized: "${cleanEmail}"`);
 
-  // Rate limit check
   if (isRateLimited(cleanEmail)) {
+    console.warn(`[DEBUG-RESET] Rate limit hit for ${cleanEmail}`);
     return res.status(429).json({ ok: false, error: "Too many requests. Please try again in an hour." });
   }
 
   // Generate secure 6-digit OTP
   const otp = crypto.randomInt(100000, 999999).toString();
   const otpHash = await bcrypt.hash(otp, 10);
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
-
-  console.log(`[AUTH] Custom OTP generated for ${cleanEmail}`);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
 
   try {
-    // We ALWAYS return success for security, but we only send the email if the user exists
+    // 1. Verify user exists in public.users
     const { data: user, error: userErr } = await supabaseAdmin
       .from("users")
       .select("id")
@@ -165,17 +98,25 @@ app.post("/api/auth/request-reset", async (req, res) => {
       .single();
 
     if (user) {
-      // Store/Update reset record
-      await supabaseAdmin
+      console.log(`[DEBUG-RESET] User found: ${user.id}. Storing OTP...`);
+
+      // 2. Store in public.password_resets
+      const { error: upsertErr } = await supabaseAdmin
         .from("password_resets")
         .upsert({
           email: cleanEmail,
           otp_hash: otpHash,
           expires_at: expiresAt,
-          attempts: 0
+          attempts: 0,
+          created_at: now.toISOString()
         }, { onConflict: 'email' });
 
-      // Send via Resend
+      if (upsertErr) {
+        console.error(`[DEBUG-RESET] DB UPSERT FAILED:`, upsertErr);
+        throw upsertErr;
+      }
+
+      // 3. Send via Resend
       const apiKey = process.env.RESEND_API_KEY;
       const fromEmail = process.env.RESEND_FROM_EMAIL || "TronX Labs <no-reply@resend.dev>";
 
@@ -196,25 +137,29 @@ app.post("/api/auth/request-reset", async (req, res) => {
               <div style="background: #f8fafc; padding: 32px; text-align: center; border-radius: 12px; margin: 24px 0;">
                 <span style="font-size: 42px; font-weight: bold; color: #1e293b; letter-spacing: 12px;">${otp}</span>
               </div>
-              <p style="font-size: 13px; color: #64748b; text-align: center;">This is an automated message. If you didn't request a reset, please ignore this email.</p>
+              <p style="font-size: 13px; color: #64748b; text-align: center;">If you didn't request a password reset, please ignore this email.</p>
             </div>
           `,
         }),
       });
+      console.log(`[DEBUG-RESET] Email sent successfully to ${cleanEmail}`);
+    } else {
+      console.log(`[DEBUG-RESET] Email ${cleanEmail} not found in users table. Silent success.`);
     }
 
-    return res.json({ ok: true, message: "If an account exists, OTP has been sent." });
+    return res.json({ ok: true, message: "If an account exists, a reset code has been sent." });
   } catch (err) {
-    console.error(`[AUTH] Request Reset Error:`, err.message);
-    return res.status(500).json({ ok: false, error: "System error processing reset request" });
+    console.error(`[DEBUG-RESET] EXCEPTION:`, err.message);
+    return res.status(500).json({ ok: false, error: "Failed to process reset request" });
   }
 });
 
 // 2. Verify OTP and Reset Password
 app.post("/api/auth/verify-reset", async (req, res) => {
-  const { email, otp, newPassword } = req.body;
+  const { email: rawEmail, otp, newPassword } = req.body;
+  const cleanEmail = normalizeEmail(rawEmail);
 
-  if (!email || !otp || !newPassword) {
+  if (!cleanEmail || !otp || !newPassword) {
     return res.status(400).json({ ok: false, error: "Missing required fields" });
   }
 
@@ -222,34 +167,49 @@ app.post("/api/auth/verify-reset", async (req, res) => {
     return res.status(400).json({ ok: false, error: "Password must be at least 6 characters" });
   }
 
-  const cleanEmail = email.trim().toLowerCase();
+  console.log(`[DEBUG-VERIFY] Attempt for: "${cleanEmail}" (Raw: "${rawEmail}")`);
 
   try {
-    // Find latest valid reset record
-    const { data: reset, error: fetchErr } = await supabaseAdmin
+    // STEP 1: Fetch rows WITHOUT filter for debugging
+    const { data: rows, error: fetchErr } = await supabaseAdmin
       .from("password_resets")
       .select("*")
       .eq("email", cleanEmail)
-      .single();
+      .order("created_at", { ascending: false })
+      .limit(5);
 
-    if (fetchErr || !reset) {
+    if (fetchErr) {
+      console.error(`[DEBUG-VERIFY] DB FETCH ERROR:`, fetchErr);
+      return res.status(500).json({ ok: false, error: "Database error" });
+    }
+
+    if (!rows || rows.length === 0) {
+      console.error(`[DEBUG-VERIFY] NO ROWS FOUND for ${cleanEmail}. Check if public.password_resets has the entry.`);
       return res.status(400).json({ ok: false, error: "No reset request found for this email" });
     }
 
-    // Expiry check
-    if (new Date() > new Date(reset.expires_at)) {
-      return res.status(400).json({ ok: false, error: "OTP has expired. Please request a new one." });
+    const reset = rows[0];
+    const now = new Date();
+    const expiryDate = new Date(reset.expires_at);
+
+    console.log(`[DEBUG-VERIFY] Row found. Created: ${reset.created_at}, Expires: ${reset.expires_at}, Now: ${now.toISOString()}`);
+
+    // Expiry Check
+    if (now > expiryDate) {
+      console.warn(`[DEBUG-VERIFY] EXPIRED. Now > Expiry`);
+      return res.status(400).json({ ok: false, error: "Reset code has expired. Please request a new one." });
     }
 
-    // Attempt lock check
+    // Lockout Check
     if (reset.attempts >= 5) {
-      return res.status(403).json({ ok: false, error: "Too many failed attempts. Please request a new code." });
+      console.warn(`[DEBUG-VERIFY] LOCKOUT. Attempts: ${reset.attempts}`);
+      return res.status(403).json({ ok: false, error: "Too many failed attempts. Request a new code." });
     }
 
     // Verify OTP
-    const isMatch = await bcrypt.compare(otp.trim(), reset.otp_hash);
-
+    const isMatch = await bcrypt.compare(String(otp).trim(), reset.otp_hash);
     if (!isMatch) {
+      console.log(`[DEBUG-VERIFY] OTP MISMATCH`);
       await supabaseAdmin
         .from("password_resets")
         .update({ attempts: reset.attempts + 1 })
@@ -257,26 +217,39 @@ app.post("/api/auth/verify-reset", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid verification code" });
     }
 
-    // SUCCESS: Update Supabase User via Admin API
-    const { error: authError } = await supabaseAdmin.auth.admin.updateUserByEmail(cleanEmail, {
+    console.log(`[DEBUG-VERIFY] OTP VALID. Updating Supabase Auth password...`);
+
+    // STEP 2: Update password using Admin API
+    // We first need the auth user ID. supabaseAdmin.auth.admin.listUsers is the only way by email.
+    const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
+    if (listErr) throw listErr;
+
+    const targetUser = users.find(u => normalizeEmail(u.email) === cleanEmail);
+    if (!targetUser) {
+      console.error(`[DEBUG-VERIFY] User found in public.users but MISSING in auth.users?`);
+      return res.status(404).json({ ok: false, error: "User not found in auth system" });
+    }
+
+    const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(targetUser.id, {
       password: newPassword
     });
 
-    if (authError) {
-      console.error("❌ Supabase Admin Update Error:", authError);
-      throw authError;
+    if (authErr) {
+      console.error(`[DEBUG-VERIFY] AUTH UPDATE FAILED:`, authErr.message);
+      throw authErr;
     }
 
-    // Cleanup: Invalidate/Delete records
+    // STEP 3: Cleanup
     await supabaseAdmin
       .from("password_resets")
       .delete()
       .eq("email", cleanEmail);
 
-    return res.json({ ok: true, message: "Password updated successfully." });
+    console.log(`[DEBUG-VERIFY] SUCCESS for ${cleanEmail}`);
+    return res.json({ ok: true, message: "Password updated successfully!" });
   } catch (err) {
-    console.error(`[AUTH] Verify Reset Error:`, err.message);
-    return res.status(500).json({ ok: false, error: "Failed to reset password" });
+    console.error(`[DEBUG-VERIFY] EXCEPTION:`, err.message);
+    return res.status(500).json({ ok: false, error: "System error during password reset" });
   }
 });
 

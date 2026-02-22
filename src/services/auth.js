@@ -124,20 +124,24 @@ export async function requestPasswordReset(email) {
 /**
  * Custom OTP Reset Flow
  */
+/**
+ * Custom OTP Reset Flow (Production Robust Version)
+ */
 export async function requestCustomOTPReset(email) {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
   const endpoint = `${apiBaseUrl}/api/auth/request-reset`.replace(/([^:])\/\//g, '$1/');
+  const cleanEmail = String(email || "").trim().toLowerCase();
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email.trim() }),
+      body: JSON.stringify({ email: cleanEmail }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || "Failed to request reset code");
+      throw new Error(data.error || data.message || "Failed to request reset code");
     }
     return data;
   } catch (err) {
@@ -149,21 +153,22 @@ export async function requestCustomOTPReset(email) {
 export async function verifyCustomOTPReset(email, otp, newPassword) {
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
   const endpoint = `${apiBaseUrl}/api/auth/verify-reset`.replace(/([^:])\/\//g, '$1/');
+  const cleanEmail = String(email || "").trim().toLowerCase();
 
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        email: email.trim(),
-        otp: otp.trim(),
+        email: cleanEmail,
+        otp: String(otp).trim(),
         newPassword
       }),
     });
 
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(data.error || "Verification failed");
+      throw new Error(data.error || data.message || "Verification failed");
     }
     return data;
   } catch (err) {
