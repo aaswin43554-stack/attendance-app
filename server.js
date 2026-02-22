@@ -275,7 +275,8 @@ const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
 // Fallback all other routes to index.html for SPA
-app.get("*", (req, res) => {
+// Using '/*' instead of '*' to avoid PathError on newer Express versions
+app.get("/*", (req, res) => {
   if (req.path.startsWith("/api") || req.path === "/health") {
     return res.status(404).json({ error: "API route not found" });
   }
