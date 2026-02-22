@@ -71,14 +71,105 @@ export async function resetPasswordLookup(email) {
 }
 
 /**
- * Native Supabase Auth Reset Flow
+ * Native Supabase Auth Reset Flow with Backend Fallback & Logging
  */
 export async function requestPasswordReset(email) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://attendance-app-i868.onrender.com/reset-password",
-  });
-  if (error) throw error;
-  return data;
+  const e = email.trim().toLowerCase();
+  console.log("🚀 Initiating password reset for:", e);
+
+  try {
+    // 1. Primary: Try native Supabase client-side reset
+    const { data, error } = await supabase.auth.resetPasswordForEmail(e, {
+      redirectTo: "https://attendance-app-i868.onrender.com/reset-password",
+    });
+
+    if (error) {
+      console.warn("⚠️ Supabase Native Reset Error:", error.message);
+      // Don't throw yet, try fallback
+    } else {
+      console.log("✅ Supabase reported success for native reset request.");
+      // We still fall back or alert user because often it returns success but doesn't send
+      // But for now, if no error, we'll assume it worked unless we want to force fallback.
+      return data;
+    }
+  } catch (err) {
+    console.error("❌ Exception in native reset:", err.message);
+  }
+
+  // 2. Fallback: Trigger backend recovery link via Resend
+  console.log("🔄 Attempting backend fallback...");
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+  const endpoint = `${apiBaseUrl}/api/auth/send-recovery-link`.replace(/([^:])\/\//g, '$1/');
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: e }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(result.error || `Fallback failed: ${response.status}`);
+    }
+
+    console.log("✅ Fallback recovery link sent successfully.");
+    return result;
+  } catch (fallbackErr) {
+    console.error("❌ Fallback system also failed:", fallbackErr.message);
+    throw new Error(`Auth Error: All reset attempts failed. ${fallbackErr.message}`);
+  }
+}
+
+/**
+ * Custom OTP Reset Flow
+ */
+export async function requestCustomOTPReset(email) {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+  const endpoint = `${apiBaseUrl}/api/auth/request-reset`.replace(/([^:])\/\//g, '$1/');
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Failed to request reset code");
+    }
+    return data;
+  } catch (err) {
+    console.error("❌ requestCustomOTPReset Error:", err);
+    throw err;
+  }
+}
+
+export async function verifyCustomOTPReset(email, otp, newPassword) {
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+  const endpoint = `${apiBaseUrl}/api/auth/verify-reset`.replace(/([^:])\/\//g, '$1/');
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: email.trim(),
+        otp: otp.trim(),
+        newPassword
+      }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Verification failed");
+    }
+    return data;
+  } catch (err) {
+    console.error("❌ verifyCustomOTPReset Error:", err);
+    throw err;
+  }
 }
 
 export async function verifyLastPassword(email, lastPass) {

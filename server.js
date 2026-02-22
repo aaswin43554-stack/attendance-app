@@ -4,6 +4,7 @@ import fetch from "node-fetch";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 // --- HYPER-ROBUST ENVIRONMENT LOADING ---
 import { config } from "dotenv";
@@ -113,79 +114,169 @@ app.get("/health", (req, res) => {
 });
 
 /**
- * OTP ENDPOINTS
+ * CUSTOM OTP PASSWORD RESET FLOW
+ * Bypasses Supabase native email delivery
  */
 
-// 1. Generate and Send OTP
-app.post("/api/auth/send-reset-otp", async (req, res) => {
+// Simple in-memory rate limiting (Resets on server restart, fine for this app)
+const resetRateLimits = new Map();
+
+function isRateLimited(email) {
+  const now = Date.now();
+  const limit = 3; // 3 requests
+  const timeframe = 60 * 60 * 1000; // per hour
+
+  const history = resetRateLimits.get(email) || [];
+  const recentRequests = history.filter(time => now - time < timeframe);
+
+  if (recentRequests.length >= limit) return true;
+
+  recentRequests.push(now);
+  resetRateLimits.set(email, recentRequests);
+  return false;
+}
+
+// 1. Request Reset OTP
+app.post("/api/auth/request-reset", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ ok: false, error: "Email is required" });
-  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured. Check SUPABASE_URL and SERVICE_ROLE_KEY." });
-
-  const cleanEmail = email.trim().toLowerCase();
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const hashedOtp = hashOTP(otp);
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-
-  console.log(`[AUTH] Generating OTP for ${cleanEmail}`);
-
-  try {
-    // Save to Supabase (Upsert to handle re-sends)
-    const { error: dbErr } = await supabaseAdmin
-      .from("password_reset_otps")
-      .upsert({
-        email: cleanEmail,
-        otp_hash: hashedOtp,
-        expires_at: expiresAt
-      }, { onConflict: 'email' });
-
-    if (dbErr) throw new Error(`Database Error: ${dbErr.message}`);
-
-    // Send via Resend with timeout
-    await sendEmailViaResend(cleanEmail, otp);
-
-    return res.json({ ok: true, message: "OTP sent successfully" });
-  } catch (error) {
-    console.error(`[AUTH] OTP Error:`, error.message);
-    return res.status(500).json({ ok: false, error: error.message });
-  }
-});
-
-// 2. Verify OTP
-app.post("/api/auth/verify-reset-otp", async (req, res) => {
-  const { email, otp } = req.body;
-  if (!email || !otp) return res.status(400).json({ ok: false, error: "Email and OTP are required" });
   if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured" });
 
   const cleanEmail = email.trim().toLowerCase();
-  const hashedInput = hashOTP(otp.trim());
+
+  // Rate limit check
+  if (isRateLimited(cleanEmail)) {
+    return res.status(429).json({ ok: false, error: "Too many requests. Please try again in an hour." });
+  }
+
+  // Generate secure 6-digit OTP
+  const otp = crypto.randomInt(100000, 999999).toString();
+  const otpHash = await bcrypt.hash(otp, 10);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 mins
+
+  console.log(`[AUTH] Custom OTP generated for ${cleanEmail}`);
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from("password_reset_otps")
+    // We ALWAYS return success for security, but we only send the email if the user exists
+    const { data: user, error: userErr } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("email", cleanEmail)
+      .single();
+
+    if (user) {
+      // Store/Update reset record
+      await supabaseAdmin
+        .from("password_resets")
+        .upsert({
+          email: cleanEmail,
+          otp_hash: otpHash,
+          expires_at: expiresAt,
+          attempts: 0
+        }, { onConflict: 'email' });
+
+      // Send via Resend
+      const apiKey = process.env.RESEND_API_KEY;
+      const fromEmail = process.env.RESEND_FROM_EMAIL || "TronX Labs <no-reply@resend.dev>";
+
+      await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: fromEmail,
+          to: [cleanEmail],
+          subject: "Your password reset code",
+          html: `
+            <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; color: #1e293b; padding: 20px; border: 1px solid #e2e8f0; border-radius: 16px;">
+              <h2 style="text-align: center; color: #3b82f6;">Reset Code</h2>
+              <p>Your password reset code is below. This code will expire in 10 minutes.</p>
+              <div style="background: #f8fafc; padding: 32px; text-align: center; border-radius: 12px; margin: 24px 0;">
+                <span style="font-size: 42px; font-weight: bold; color: #1e293b; letter-spacing: 12px;">${otp}</span>
+              </div>
+              <p style="font-size: 13px; color: #64748b; text-align: center;">This is an automated message. If you didn't request a reset, please ignore this email.</p>
+            </div>
+          `,
+        }),
+      });
+    }
+
+    return res.json({ ok: true, message: "If an account exists, OTP has been sent." });
+  } catch (err) {
+    console.error(`[AUTH] Request Reset Error:`, err.message);
+    return res.status(500).json({ ok: false, error: "System error processing reset request" });
+  }
+});
+
+// 2. Verify OTP and Reset Password
+app.post("/api/auth/verify-reset", async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ ok: false, error: "Missing required fields" });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ ok: false, error: "Password must be at least 6 characters" });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    // Find latest valid reset record
+    const { data: reset, error: fetchErr } = await supabaseAdmin
+      .from("password_resets")
       .select("*")
       .eq("email", cleanEmail)
       .single();
 
-    if (error || !data) return res.status(400).json({ ok: false, error: "No valid code found for this email" });
+    if (fetchErr || !reset) {
+      return res.status(400).json({ ok: false, error: "No reset request found for this email" });
+    }
 
     // Expiry check
-    if (new Date() > new Date(data.expires_at)) {
-      await supabaseAdmin.from("password_reset_otps").delete().eq("email", cleanEmail);
-      return res.status(400).json({ ok: false, error: "Code has expired. Please request a new one." });
+    if (new Date() > new Date(reset.expires_at)) {
+      return res.status(400).json({ ok: false, error: "OTP has expired. Please request a new one." });
     }
 
-    // Hash check
-    if (data.otp_hash !== hashedInput) {
-      return res.status(400).json({ ok: false, error: "Incorrect verification code" });
+    // Attempt lock check
+    if (reset.attempts >= 5) {
+      return res.status(403).json({ ok: false, error: "Too many failed attempts. Please request a new code." });
     }
 
-    // Success: Delete code
-    await supabaseAdmin.from("password_reset_otps").delete().eq("email", cleanEmail).catch(() => { });
+    // Verify OTP
+    const isMatch = await bcrypt.compare(otp.trim(), reset.otp_hash);
 
-    return res.json({ ok: true, message: "Identity verified" });
+    if (!isMatch) {
+      await supabaseAdmin
+        .from("password_resets")
+        .update({ attempts: reset.attempts + 1 })
+        .eq("email", cleanEmail);
+      return res.status(400).json({ ok: false, error: "Invalid verification code" });
+    }
+
+    // SUCCESS: Update Supabase User via Admin API
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserByEmail(cleanEmail, {
+      password: newPassword
+    });
+
+    if (authError) {
+      console.error("❌ Supabase Admin Update Error:", authError);
+      throw authError;
+    }
+
+    // Cleanup: Invalidate/Delete records
+    await supabaseAdmin
+      .from("password_resets")
+      .delete()
+      .eq("email", cleanEmail);
+
+    return res.json({ ok: true, message: "Password updated successfully." });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: "Verification system error" });
+    console.error(`[AUTH] Verify Reset Error:`, err.message);
+    return res.status(500).json({ ok: false, error: "Failed to reset password" });
   }
 });
 

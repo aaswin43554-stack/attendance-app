@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
 import Toast from "../ui/Toast";
-import { resetPasswordLookup, requestPasswordReset } from "../services/auth";
 import { useLanguage } from "../context/LanguageContext";
+import { requestCustomOTPReset } from "../services/auth";
 
 export default function ForgotPassword() {
     const nav = useNavigate();
@@ -21,26 +21,24 @@ export default function ForgotPassword() {
 
     const handleResetRequest = async (e) => {
         e.preventDefault();
-        if (!email) return showToast(t('enterEmail'));
+        if (!email) return showToast(t('enterEmail') || "Please enter your email");
 
         try {
             setLoading(true);
-            // 1. Optional: Check if user exists in our DB first (prevents leaking email existence if desired, but here we use it for validation)
-            try {
-                await resetPasswordLookup(email);
-            } catch (err) {
-                // If user doesn't exist in custom table, we can still try Supabase Auth or just fail here
-                console.warn("User not found in custom table:", err.message);
-            }
 
-            // 2. Trigger native Supabase reset email
-            await requestPasswordReset(email);
+            // Trigger custom OTP reset flow
+            await requestCustomOTPReset(email);
 
+            showToast(t('otpSent') || "Reset code sent! Redirecting...");
             setSubmitted(true);
-            showToast(t('otpSent') || "Reset link sent to your email!");
+
+            // Navigate to OTP verification page after a short delay
+            setTimeout(() => {
+                nav(`/reset-password-otp?email=${encodeURIComponent(email)}`);
+            }, 2000);
         } catch (err) {
-            console.error("Reset Error:", err);
-            showToast(err.message || "Failed to send reset link.");
+            console.error("Reset Flow Error:", err);
+            showToast(err.message || "Failed to send reset code");
         } finally {
             setLoading(false);
         }
@@ -51,7 +49,7 @@ export default function ForgotPassword() {
             <section className="single" style={{ maxWidth: 400, margin: '0 auto' }}>
                 <Card
                     title={t('forgotPasswordTitle') || "Forgot Password"}
-                    subtitle={submitted ? "Email Sent" : (t('forgotPasswordSubtitle') || "Enter your email to receive a reset link")}
+                    subtitle={submitted ? "Email Sent" : (t('forgotPasswordSubtitle') || "Enter your email to receive a reset code")}
                 >
                     {!submitted ? (
                         <form onSubmit={handleResetRequest}>
@@ -68,7 +66,7 @@ export default function ForgotPassword() {
                                 />
                                 <div className="row mt20">
                                     <button className="btn btnPrimary w100" type="submit" disabled={loading}>
-                                        {loading ? (t('sending') || "Sending...") : (t('resetPasswordBtn') || "Send Reset Link")}
+                                        {loading ? (t('sending') || "Sending...") : (t('resetPasswordBtn') || "Send Reset Code")}
                                     </button>
                                 </div>
                             </div>
@@ -77,11 +75,12 @@ export default function ForgotPassword() {
                         <div className="item-fade center">
                             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📧</div>
                             <p style={{ marginBottom: '1.5rem', lineHeight: 1.5 }}>
-                                If an account exists for <strong>{email}</strong>, you will receive an email with instructions to reset your password shortly.
+                                If an account exists for <strong>{email}</strong>, you will receive an email with a 6-digit verification code shortly.
                             </p>
-                            <button className="btn btnPrimary w100" onClick={() => nav("/login")}>
-                                {t('backToLogin') || "Back to Login"}
-                            </button>
+                            <div className="loader-container">
+                                <div className="loader"></div>
+                                <p className="muted">Redirecting you...</p>
+                            </div>
                         </div>
                     )}
 
@@ -92,38 +91,54 @@ export default function ForgotPassword() {
                             </button>
                         </div>
                     )}
-
-                    <div style={{ position: 'absolute', bottom: '10px', right: '15px', opacity: 0.2, fontSize: '10px', pointerEvents: 'none' }}>
-                        v1.2.1-SUPA
-                    </div>
                 </Card>
             </section>
 
             <style>{`
-        .input-premium {
-          width: 100%;
-          padding: 12px;
-          border-radius: 12px;
-          border: 2px solid var(--border);
-          background: var(--bg);
-          font-size: 1rem;
-          transition: all 0.2s;
-        }
-        .input-premium:focus {
-          border-color: var(--primary);
-          outline: none;
-          box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.1);
-        }
-        .item-fade {
-          animation: fadeIn 0.3s ease-out;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .w100 { width: 100%; }
-        .mt20 { margin-top: 20px; }
-      `}</style>
+                .input-premium {
+                  width: 100%;
+                  padding: 12px;
+                  border-radius: 12px;
+                  border: 2px solid var(--border);
+                  background: var(--bg);
+                  font-size: 1rem;
+                  transition: all 0.2s;
+                }
+                .input-premium:focus {
+                  border-color: var(--primary);
+                  outline: none;
+                  box-shadow: 0 0 0 4px rgba(var(--primary-rgb), 0.1);
+                }
+                .item-fade {
+                  animation: fadeIn 0.3s ease-out;
+                }
+                @keyframes fadeIn {
+                  from { opacity: 0; transform: translateY(10px); }
+                  to { opacity: 1; transform: translateY(0); }
+                }
+                .w100 { width: 100%; }
+                .mt20 { margin-top: 20px; }
+                .center { text-align: center; }
+                .loader-container {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 10px;
+                }
+                .loader {
+                  border: 3px solid #f3f3f3;
+                  border-top: 3px solid var(--primary);
+                  border-radius: 50%;
+                  width: 24px;
+                  height: 24px;
+                  animation: spin 1s linear infinite;
+                }
+                @keyframes spin {
+                  0% { transform: rotate(0deg); }
+                  100% { transform: rotate(360deg); }
+                }
+                .muted { color: #64748b; font-size: 0.9rem; }
+            `}</style>
             <Toast message={toast} />
         </main>
     );
