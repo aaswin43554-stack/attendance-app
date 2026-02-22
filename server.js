@@ -24,14 +24,14 @@ console.log(`[SYS] Environment: ${process.env.NODE_ENV || 'development'}`);
 
 // 3. Critical Startup Validation
 const REQUIRED_ENV = ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "RESEND_API_KEY"];
-REQUIRED_ENV.forEach(key => {
-  if (!process.env[key]) {
-    console.error(`❌ CRITICAL ERROR: Missing environment variable: ${key}`);
-    if (process.env.NODE_ENV === "production") {
-      throw new Error(`CRITICAL: Missing required environment variable ${key}`);
-    }
+const missing = REQUIRED_ENV.filter(key => !process.env[key]);
+
+if (missing.length > 0) {
+  console.error(`❌ CRITICAL ERROR: The following environment variables are MISSING: ${missing.join(", ")}`);
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(`CRITICAL: Missing required environment variables: ${missing.join(", ")}`);
   }
-});
+}
 
 // 4. Supabase Admin Initialisation
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -93,14 +93,23 @@ app.post("/api/auth/request-reset", async (req, res) => {
   const { email: rawEmail } = req.body;
   const cleanEmail = normalizeEmail(rawEmail);
 
-  if (!cleanEmail) return res.status(400).json({ ok: false, error: "Email is required" });
-  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not configured" });
+  console.log(`[REQ_RESET] Incoming request for email: "${cleanEmail}" (Raw: "${rawEmail}")`);
 
-  console.log(`[DEBUG-RESET] Request for: "${rawEmail}" -> Normalized: "${cleanEmail}"`);
+  if (!cleanEmail) return res.status(400).json({ ok: false, error: "Email is required" });
+
+  // 1. Check Env Vars & Client Config
+  if (!process.env.RESEND_API_KEY) {
+    console.error("[REQ_RESET] ERROR: RESEND_API_KEY is not defined.");
+    return res.status(500).json({ ok: false, error: "Email service not configured (Missing API Key)" });
+  }
+  if (!supabaseAdmin) {
+    console.error("[REQ_RESET] ERROR: supabaseAdmin client not initialized.");
+    return res.status(500).json({ ok: false, error: "Database service not initialized" });
+  }
 
   if (isRateLimited(cleanEmail)) {
-    console.warn(`[DEBUG-RESET] Rate limit hit for ${cleanEmail}`);
-    return res.status(429).json({ ok: false, error: "Too many requests. Please try again soon." });
+    console.warn(`[REQ_RESET] Rate limit hit for ${cleanEmail}`);
+    return res.status(429).json({ ok: false, error: "Too many requests. Please try again in an hour." });
   }
 
   // Generate secure 6-digit OTP
@@ -110,7 +119,7 @@ app.post("/api/auth/request-reset", async (req, res) => {
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
 
   try {
-    // 1. Verify user exists
+    // 2. Verify user exists
     const { data: user, error: userErr } = await supabaseAdmin
       .from("users")
       .select("id")
@@ -118,9 +127,9 @@ app.post("/api/auth/request-reset", async (req, res) => {
       .single();
 
     if (user) {
-      console.log(`[DEBUG-RESET] User found ID: ${user.id}. Storing code...`);
+      console.log(`[REQ_RESET] User found: ${user.id}. Storing OTP record...`);
 
-      // 2. Store in public.password_resets
+      // 3. Store in public.password_resets
       const { error: upsertErr } = await supabaseAdmin
         .from("password_resets")
         .upsert({
@@ -132,14 +141,15 @@ app.post("/api/auth/request-reset", async (req, res) => {
         }, { onConflict: 'email' });
 
       if (upsertErr) {
-        console.error(`[DEBUG-RESET] DB UPSERT FAILED:`, upsertErr);
-        throw upsertErr;
+        console.error(`[REQ_RESET] DB UPSERT FAILED for ${cleanEmail}:`, upsertErr);
+        return res.status(500).json({ ok: false, error: "DB insert failed: Could not store reset record" });
       }
 
-      // 3. Send via Resend
+      // 4. Send via Resend
       const apiKey = process.env.RESEND_API_KEY;
       const fromEmail = process.env.RESEND_FROM_EMAIL || "TronX Labs <no-reply@resend.dev>";
 
+      console.log(`[REQ_RESET] Sending email via Resend to ${cleanEmail}...`);
       const emailResult = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -162,15 +172,23 @@ app.post("/api/auth/request-reset", async (req, res) => {
           `,
         }),
       });
-      console.log(`[DEBUG-RESET] Resend status: ${emailResult.status}`);
+
+      if (!emailResult.ok) {
+        const errorData = await emailResult.json().catch(() => ({}));
+        console.error(`[REQ_RESET] Resend API Error (${emailResult.status}):`, errorData);
+        return res.status(500).json({ ok: false, error: `Email send failed: ${errorData.message || emailResult.statusText}` });
+      }
+
+      console.log(`[REQ_RESET] SUCCESS: Reset OTP sent to ${cleanEmail}`);
     } else {
-      console.log(`[DEBUG-RESET] Email ${cleanEmail} not in users table. Silent success.`);
+      console.log(`[REQ_RESET] WARN: Email ${cleanEmail} not found in users table. Returning silent success.`);
     }
 
+    // Generic success for security
     return res.json({ ok: true, message: "If an account exists, a reset code has been sent." });
   } catch (err) {
-    console.error(`[DEBUG-RESET] EXCEPTION:`, err.message);
-    return res.status(500).json({ ok: false, error: "Failed to process reset request" });
+    console.error(`[REQ_RESET] UNEXPECTED FATAL ERROR:`, err);
+    return res.status(500).json({ ok: false, error: `Internal error: ${err.message}` });
   }
 });
 

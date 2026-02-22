@@ -37,8 +37,10 @@ export default function ForgotPassword() {
                 nav(`/reset-password-otp?email=${encodeURIComponent(email)}`);
             }, 2000);
         } catch (err) {
-            console.error("Reset Flow Error:", err);
-            showToast(err.message || "Failed to send reset code");
+            console.error("❌ Reset Request Error:", err);
+            // Surface specific error from backend if available
+            const errorMsg = err.message || "Failed to send reset code. Please try again.";
+            showToast(errorMsg);
         } finally {
             setLoading(false);
         }
