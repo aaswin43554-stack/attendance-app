@@ -141,8 +141,16 @@ app.post("/api/auth/request-reset", async (req, res) => {
         }, { onConflict: 'email' });
 
       if (upsertErr) {
-        console.error(`[REQ_RESET] DB UPSERT FAILED for ${cleanEmail}:`, upsertErr);
-        return res.status(500).json({ ok: false, error: "DB insert failed: Could not store reset record" });
+        console.error(`[REQ_RESET] DB UPSERT FAILED for ${cleanEmail}:`);
+        console.error(` > Message: ${upsertErr.message}`);
+        console.error(` > Details: ${upsertErr.details}`);
+        console.error(` > Hint: ${upsertErr.hint}`);
+        console.error(` > Code: ${upsertErr.code}`);
+        return res.status(500).json({
+          ok: false,
+          error: `DB insert failed: ${upsertErr.message}`,
+          details: upsertErr.details
+        });
       }
 
       // 4. Send via Resend
