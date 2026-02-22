@@ -75,7 +75,7 @@ export async function resetPasswordLookup(email) {
  */
 export async function requestPasswordReset(email) {
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
+    redirectTo: "https://attendance-app-i868.onrender.com/reset-password",
   });
   if (error) throw error;
   return data;

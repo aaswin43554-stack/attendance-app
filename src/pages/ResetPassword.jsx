@@ -49,10 +49,17 @@ export default function ResetPassword() {
 
         try {
             setUpdating(true);
+
+            // 1. Update in Supabase Auth (primary)
+            const { error: authError } = await supabase.auth.updateUser({ password: newPass });
+            if (authError) throw authError;
+
+            // 2. Update in custom users table (for consistency)
             await updatePassword(email, newPass);
+
             showToast(t('passUpdateSuccess') || "Password updated successfully!", 2000);
 
-            // Log out from Supabase Auth after success (optional, but good for security)
+            // Log out from Supabase Auth after success
             await supabase.auth.signOut();
 
             setTimeout(() => nav("/login"), 2000);
