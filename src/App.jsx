@@ -13,6 +13,7 @@ import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TeamLeaderDashboard from "./pages/team-leader/TeamLeaderDashboard";
 import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 import { getSession } from "./services/storage";
 
@@ -45,6 +46,7 @@ export default function App() {
 
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/employee/signup" element={<EmployeeSignup />} />
         <Route
           path="/employee/dashboard"

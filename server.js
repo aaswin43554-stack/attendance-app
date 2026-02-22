@@ -26,9 +26,10 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 // STARTUP DIAGNOSTICS
 console.log("="?.repeat(50));
 console.log("🚀 BULLETPROOF SERVER STARTUP");
-if (!SUPABASE_URL) console.error("❌ MISSING: SUPABASE_URL");
-if (!SUPABASE_KEY) console.error("❌ MISSING: SUPABASE_SERVICE_ROLE_KEY");
-if (!process.env.RESEND_API_KEY) console.error("❌ MISSING: RESEND_API_KEY");
+console.log("Mode: Client-side Native Reset Preferred");
+if (!SUPABASE_URL) console.warn("⚠️ WARNING: SUPABASE_URL missing");
+if (!SUPABASE_KEY) console.warn("ℹ️ INFO: SUPABASE_SERVICE_ROLE_KEY missing (Backend OTP disabled)");
+if (!process.env.RESEND_API_KEY) console.warn("ℹ️ INFO: RESEND_API_KEY missing (Backend Email disabled)");
 console.log("="?.repeat(50));
 
 /**

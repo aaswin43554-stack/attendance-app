@@ -21,13 +21,28 @@ export async function signupEmployee({ name, phone, email, pass }) {
   const e = email.trim().toLowerCase();
 
   try {
-    // Check if email already exists
+    // Check if email already exists in custom DB
     const exists = await userExists(e);
     if (exists) throw new Error("Email already exists.");
 
-    // Add user to Google Sheet
+    // 1. Create user in Supabase Auth (for future password resets)
+    const { data: authData, error: authErr } = await supabase.auth.signUp({
+      email: e,
+      password: pass,
+      options: {
+        data: { name: name.trim() }
+      }
+    });
+
+    if (authErr) {
+      // If user already exists in Auth but not in our DB, we might want to handle it, 
+      // but for now we'll just throw the error.
+      throw new Error(authErr.message);
+    }
+
+    // 2. Add user to custom table
     const user = {
-      id: crypto.randomUUID(), // Generate a valid UUID for Supabase primary keys
+      id: authData.user?.id || crypto.randomUUID(),
       name: name.trim(),
       phone: phone.trim(),
       email: e,
@@ -43,7 +58,7 @@ export async function signupEmployee({ name, phone, email, pass }) {
   }
 }
 
-export async function resetPassword(email) {
+export async function resetPasswordLookup(email) {
   const e = email.trim().toLowerCase();
   try {
     // We still check if the user exists in our DB first
@@ -51,8 +66,19 @@ export async function resetPassword(email) {
     if (!user) throw new Error("No account found with this email.");
     return user;
   } catch (error) {
-    throw new Error(error.message || "Reset failed");
+    throw new Error(error.message || "Email lookup failed");
   }
+}
+
+/**
+ * Native Supabase Auth Reset Flow
+ */
+export async function requestPasswordReset(email) {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) throw error;
+  return data;
 }
 
 export async function verifyLastPassword(email, lastPass) {
@@ -132,9 +158,16 @@ export async function verifyOTPCode(email, otp) {
  */
 export async function updatePassword(email, newPass) {
   try {
-    // We update the password directly in your custom users table
-    // (Bypassing Supabase Auth since we used our own OTP logic)
+    // 1. Update in custom users table (for fallback/legacy logic)
     await updateUserPassword(email, newPass);
+
+    // 2. If we are in a session (e.g. from recovery link), update Supabase Auth too
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) console.error("Supabase Auth update error:", error.message);
+    }
+
     return true;
   } catch (error) {
     throw new Error(error.message || "Failed to update password");
