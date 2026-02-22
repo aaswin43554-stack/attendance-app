@@ -84,6 +84,32 @@ app.get("/health", (req, res) => {
   });
 });
 
+// Debug: Table Existence Check
+app.get("/api/debug/table-check", async (req, res) => {
+  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not initialized" });
+
+  try {
+    const { data, error, status } = await supabaseAdmin
+      .from("password_resets")
+      .select("id")
+      .limit(1);
+
+    if (error) {
+      console.error("DEBUG TABLE CHECK ERROR:", error);
+      return res.status(status || 500).json({
+        ok: false,
+        error: error.message,
+        hint: error.hint,
+        details: error.details
+      });
+    }
+
+    return res.json({ ok: true, message: "Table 'password_resets' is accessible", data });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /**
  * CUSTOM OTP PASSWORD RESET FLOW
  */
