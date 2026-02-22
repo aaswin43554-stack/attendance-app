@@ -141,15 +141,10 @@ app.post("/api/auth/request-reset", async (req, res) => {
         }, { onConflict: 'email' });
 
       if (upsertErr) {
-        console.error(`[REQ_RESET] DB UPSERT FAILED for ${cleanEmail}:`);
-        console.error(` > Message: ${upsertErr.message}`);
-        console.error(` > Details: ${upsertErr.details}`);
-        console.error(` > Hint: ${upsertErr.hint}`);
-        console.error(` > Code: ${upsertErr.code}`);
+        console.error("SUPABASE INSERT ERROR:", upsertErr);
         return res.status(500).json({
           ok: false,
-          error: `DB insert failed: ${upsertErr.message}`,
-          details: upsertErr.details
+          message: upsertErr.message
         });
       }
 
@@ -225,8 +220,8 @@ app.post("/api/auth/verify-reset", async (req, res) => {
       .limit(1);
 
     if (fetchErr) {
-      console.error(`[DEBUG-VERIFY] DB FETCH ERROR:`, fetchErr);
-      return res.status(500).json({ ok: false, error: "Database error" });
+      console.error("SUPABASE FETCH ERROR:", fetchErr);
+      return res.status(500).json({ ok: false, message: fetchErr.message });
     }
 
     if (!rows || rows.length === 0) {
