@@ -90,17 +90,7 @@ export default function Login() {
                                 {t('createAccountBtn')}
                             </button>
                         </div>
-                        <div className="center mt10">
-                            <button
-                                className="btn btnText"
-                                type="button"
-                                onClick={() => nav("/forgot-password")}
-                                style={{ fontSize: '0.85rem' }}
-                            >
-                                {t('forgotPassword') || 'Forgot Password?'}
-                            </button>
-                        </div>
-                    </form>
+                                            </form>
 
                     <div className="hr" />
 
