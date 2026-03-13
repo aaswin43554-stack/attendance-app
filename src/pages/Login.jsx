@@ -90,7 +90,11 @@ export default function Login() {
                                 {t('createAccountBtn')}
                             </button>
                         </div>
+<<<<<<< HEAD
                     </form>
+=======
+                                            </form>
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 
                     <div className="hr" />
 

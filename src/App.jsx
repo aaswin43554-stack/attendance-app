@@ -13,6 +13,10 @@ import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import TeamLeaderDashboard from "./pages/team-leader/TeamLeaderDashboard";
+<<<<<<< HEAD
+=======
+
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 
 import { getSession } from "./services/storage";
 
@@ -54,6 +58,10 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
+<<<<<<< HEAD
+=======
+
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
         <Route path="/employee/signup" element={<EmployeeSignup />} />
         <Route
           path="/employee/dashboard"

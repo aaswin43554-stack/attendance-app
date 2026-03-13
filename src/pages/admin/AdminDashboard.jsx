@@ -216,21 +216,39 @@ export default function AdminDashboard() {
 
   const updateRole = async (email, newRole) => {
     try {
+<<<<<<< HEAD
       await updateUserRole(email, newRole);
       setEmployees(prev => prev.map(u => u.email === email ? { ...u, role: newRole } : u));
       toast.success("Role updated successfully");
     } catch (e) {
       toast.error("Failed to update role: " + e.message);
+=======
+      const { updateUserRole } = await import("../../services/supabase");
+      await updateUserRole(email, newRole);
+      setEmployees(prev => prev.map(u => u.email === email ? { ...u, role: newRole } : u));
+      alert("Role updated successfully");
+    } catch (e) {
+      alert("Failed to update role: " + e.message);
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
     }
   };
 
   const updateManager = async (employeeEmail, leaderEmail) => {
     try {
+<<<<<<< HEAD
       await assignEmployeeToLeader(employeeEmail, leaderEmail);
       setEmployees(prev => prev.map(u => u.email === employeeEmail ? { ...u, managed_by: leaderEmail } : u));
       toast.success("Manager assigned successfully");
     } catch (e) {
       toast.error("Failed to assign manager: " + e.message);
+=======
+      const { assignEmployeeToLeader } = await import("../../services/supabase");
+      await assignEmployeeToLeader(employeeEmail, leaderEmail);
+      setEmployees(prev => prev.map(u => u.email === employeeEmail ? { ...u, managed_by: leaderEmail } : u));
+      alert("Manager assigned successfully");
+    } catch (e) {
+      alert("Failed to assign manager: " + e.message);
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
     }
   };
 

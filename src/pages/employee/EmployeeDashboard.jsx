@@ -53,8 +53,8 @@ export default function EmployeeDashboard() {
     }
   };
 
-  useEffect(() => { 
-    refresh(); 
+  useEffect(() => {
+    refresh();
 
     if (me?.name) {
       // Set up Realtime Subscription for this user's attendance
@@ -133,6 +133,90 @@ export default function EmployeeDashboard() {
             <button className="btn btnOk" disabled={busy} onClick={() => doAction("checkin")}>{t('checkin')}</button>
             <button className="btn btnDanger" disabled={busy} onClick={() => doAction("checkout")}>{t('checkout')}</button>
           </div>
+
+          <div className="hr" />
+
+          <h3 className="title" style={{ fontSize: 16, margin: "10px 0" }}>{t('workerAttendance')}</h3>
+
+          <div className="row" style={{ gap: 10, marginBottom: 15 }}>
+            <div style={{ flex: 1 }}>
+              <label className="muted small">{t('startWorkerId')}</label>
+              <input
+                type="number"
+                className="input"
+                value={workerConfig.start}
+                onChange={e => setWorkerConfig(p => ({ ...p, start: e.target.value }))}
+                placeholder="e.g. 1"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="muted small">{t('endWorkerId')}</label>
+              <input
+                type="number"
+                className="input"
+                value={workerConfig.end}
+                onChange={e => setWorkerConfig(p => ({ ...p, end: e.target.value }))}
+                placeholder="e.g. 10"
+              />
+            </div>
+          </div>
+
+          {workerIds.length > 0 ? (
+            <>
+              <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedWorkers.length === workerIds.length}
+                    onChange={e => setSelectedWorkers(e.target.checked ? [...workerIds] : [])}
+                  />
+                  <span className="small font-bold">{t('selectAll')} ({workerIds.length})</span>
+                </label>
+                <div className="row" style={{ gap: 8 }}>
+                  <button
+                    className="btn btnOk small"
+                    disabled={busy || selectedWorkers.length === 0}
+                    onClick={() => doWorkerAction("checkin")}
+                  >
+                    {t('checkin')}
+                  </button>
+                  <button
+                    className="btn btnDanger small"
+                    disabled={busy || selectedWorkers.length === 0}
+                    onClick={() => doWorkerAction("checkout")}
+                  >
+                    {t('checkout')}
+                  </button>
+                </div>
+              </div>
+
+              <div className="list" style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e2e8f0", padding: 10, borderRadius: 8 }}>
+                {workerIds.map(id => (
+                  <label key={id} className="item" style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedWorkers.includes(id)}
+                        onChange={e => {
+                          if (e.target.checked) setSelectedWorkers(p => [...p, id]);
+                          else setSelectedWorkers(p => p.filter(x => x !== id));
+                        }}
+                      />
+                      <span>{t('workerLabel')} {id}</span>
+                    </div>
+                    <span className="pill small">
+                      <span className="dot" style={{ background: workerStatus[id] ? "var(--ok)" : "#cbd5e1" }} />
+                      <span style={{ fontSize: 11 }}>{workerStatus[id] ? t('statusWorking') : t('statusNotWorking')}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="muted small" style={{ textAlign: "center", padding: 20, background: "#f8fafc", borderRadius: 8 }}>
+              {t('noWorkersInRange')}
+            </div>
+          )}
 
           <div className="hr" />
 

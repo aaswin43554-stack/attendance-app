@@ -198,6 +198,7 @@ export async function updateUserPassword(email, newPassword) {
  */
 export async function updateUserRole(email, role) {
   try {
+<<<<<<< HEAD
     if (!email || !role) {
       console.error("❌ Missing params for updateRole:", { email, role });
       throw new Error("Missing email or role for update");
@@ -237,6 +238,17 @@ export async function updateUserRole(email, role) {
       return true;
     }
     console.error("❌ Error updating role:", error.message || error);
+=======
+    const { data, error } = await supabase
+      .from("users")
+      .update({ role })
+      .eq("email", email.toLowerCase());
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error("❌ Error updating role:", error);
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
     throw error;
   }
 }
@@ -246,6 +258,7 @@ export async function updateUserRole(email, role) {
  */
 export async function assignEmployeeToLeader(employeeEmail, leaderEmail) {
   try {
+<<<<<<< HEAD
     if (!employeeEmail) throw new Error("Missing employee email");
 
     console.log(`📤 Assigning ${employeeEmail} to manager ${leaderEmail || "None"}...`);
@@ -282,6 +295,17 @@ export async function assignEmployeeToLeader(employeeEmail, leaderEmail) {
       return true;
     }
     console.error("❌ Error assigning employee:", error.message || error);
+=======
+    const { data, error } = await supabase
+      .from("users")
+      .update({ managed_by: leaderEmail })
+      .eq("email", employeeEmail.toLowerCase());
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error("❌ Error assigning employee:", error);
+>>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
     throw error;
   }
 }
