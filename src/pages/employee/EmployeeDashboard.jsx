@@ -3,18 +3,19 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../ui/Card";
 import Toast from "../../ui/Toast";
 import { getSession, getUsers } from "../../services/storage";
-import { createAttendance, createBatchAttendance } from "../../services/attendance";
-import { getUserAttendanceRecords } from "../../services/supabase";
+import { createAttendance } from "../../services/attendance";
+import { supabase, getUserAttendanceRecords } from "../../services/supabase";
 import { logout } from "../../services/auth";
 import { useLanguage } from "../../context/LanguageContext";
 import LocationMap from "../../ui/LocationMap";
 
-import { formatBangkokTime } from "../../utils/date";
+import { formatBangkokTime, parseISO } from "../../utils/date";
 
 export default function EmployeeDashboard() {
   const nav = useNavigate();
   const session = getSession();
   const { t } = useLanguage();
+  const [now, setNow] = useState(new Date());
 
   // Get user info from session (userId is the email)
   const me = useMemo(() => {
@@ -32,22 +33,6 @@ export default function EmployeeDashboard() {
   const [busy, setBusy] = useState(false);
   const [showMaps, setShowMaps] = useState({}); // track which logs have map visible
 
-  // Worker Attendance State
-  const [workerConfig, setWorkerConfig] = useState({ start: "", end: "" });
-  const [selectedWorkers, setSelectedWorkers] = useState([]);
-  const [workerStatus, setWorkerStatus] = useState({}); // workerId -> isWorking
-
-  const workerIds = useMemo(() => {
-    const s = parseInt(workerConfig.start);
-    const e = parseInt(workerConfig.end);
-    if (!isNaN(s) && !isNaN(e) && s <= e) {
-      const ids = [];
-      for (let i = s; i <= e; i++) ids.push(i);
-      return ids;
-    }
-    return [];
-  }, [workerConfig]);
-
   const refresh = async () => {
     if (!me) return;
     try {
@@ -63,37 +48,36 @@ export default function EmployeeDashboard() {
           latest
         });
       }
-
-      // Update worker statuses based on records
-      const latestWorkerRecords = {};
-      records.forEach(r => {
-        if (r.userName?.startsWith("Worker ") || r.userId?.includes("_worker_")) {
-          // Extract worker ID from "Worker X (via Y)" or "email_worker_X"
-          let workerId = null;
-          if (r.userName?.startsWith("Worker ")) {
-            const match = r.userName.match(/Worker (\d+)/);
-            if (match) workerId = match[1];
-          } else if (r.userId?.includes("_worker_")) {
-            workerId = r.userId.split("_worker_")[1];
-          }
-
-          if (workerId && !latestWorkerRecords[workerId]) {
-            latestWorkerRecords[workerId] = r.type;
-          }
-        }
-      });
-      const newWorkerStatus = {};
-      Object.keys(latestWorkerRecords).forEach(id => {
-        newWorkerStatus[id] = latestWorkerRecords[id] === "checkin";
-      });
-      setWorkerStatus(newWorkerStatus);
-
     } catch (error) {
       console.error("Failed to fetch logs:", error);
     }
   };
 
-  useEffect(() => { refresh(); }, [me?.id]);
+  useEffect(() => { 
+    refresh(); 
+
+    if (me?.name) {
+      // Set up Realtime Subscription for this user's attendance
+      const channel = supabase.channel(`employee_realtime_${me.name}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, (payload) => {
+          // Check if the change is relevant to this user
+          const newRec = payload.new;
+          if (newRec.userName === me.name || newRec.userName.includes(`via ${me.name}`)) {
+            console.log("🔄 Realtime: Own attendance change, refreshing...");
+            refresh();
+          }
+        })
+        .subscribe();
+
+      // Local ticker for UI clocks (timer)
+      const ticker = setInterval(() => setNow(new Date()), 1000);
+
+      return () => {
+        supabase.removeChannel(channel);
+        clearInterval(ticker);
+      };
+    }
+  }, [me?.id, me?.name]);
 
   const doAction = async (type) => {
     if (!me) return;
@@ -113,28 +97,6 @@ export default function EmployeeDashboard() {
     }
   };
 
-  const doWorkerAction = async (type) => {
-    if (!me || selectedWorkers.length === 0) return;
-    setBusy(true);
-    try {
-      await createBatchAttendance({
-        userId: me.id,
-        type,
-        userName: me.name,
-        workerIds: selectedWorkers
-      });
-      setToast(`${type === "checkin" ? t('checkin') : t('checkout')} ${selectedWorkers.length} workers.`);
-      setSelectedWorkers([]);
-      refresh();
-    } catch (error) {
-      console.error("❌ Worker action error:", error);
-      setToast("❌ " + error.message);
-    } finally {
-      setBusy(false);
-      setTimeout(() => setToast(""), 2200);
-    }
-  };
-
   const onLogout = () => {
     logout();
     nav("/login");
@@ -147,100 +109,30 @@ export default function EmployeeDashboard() {
           title={`${t('hello')}, ${me?.name || "Employee"}`}
           subtitle={me ? `${me.email}${me.phone ? " • " + me.phone : ""}` : ""}
           right={
-            <span className="pill">
-              <span className="dot" style={{ background: status.status === "Working" ? "var(--ok)" : "#cbd5e1" }} />
-              <span>{status.status === "Working" ? t('statusWorking') : t('statusNotWorking')}</span>
-            </span>
+            <div style={{ textAlign: "right" }}>
+              <span className="pill">
+                <span className="dot" style={{ background: status.status === "Working" ? "var(--ok)" : "#cbd5e1" }} />
+                <span>{status.status === "Working" ? t('statusWorking') : t('statusNotWorking')}</span>
+              </span>
+              {status.status === "Working" && status.latest && (
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--ok)", marginTop: "4px" }}>
+                  {(() => {
+                    const start = parseISO(status.latest.time);
+                    const diffMs = now - start;
+                    const h = Math.floor(diffMs / 3600000);
+                    const m = Math.floor((diffMs % 3600000) / 60000);
+                    const s = Math.floor((diffMs % 60000) / 1000);
+                    return `${h}h ${m}m ${s}s`;
+                  })()}
+                </div>
+              )}
+            </div>
           }
         >
           <div className="row">
             <button className="btn btnOk" disabled={busy} onClick={() => doAction("checkin")}>{t('checkin')}</button>
             <button className="btn btnDanger" disabled={busy} onClick={() => doAction("checkout")}>{t('checkout')}</button>
           </div>
-
-          <div className="hr" />
-
-          <h3 className="title" style={{ fontSize: 16, margin: "10px 0" }}>{t('workerAttendance')}</h3>
-
-          <div className="row" style={{ gap: 10, marginBottom: 15 }}>
-            <div style={{ flex: 1 }}>
-              <label className="muted small">{t('startWorkerId')}</label>
-              <input
-                type="number"
-                className="input"
-                value={workerConfig.start}
-                onChange={e => setWorkerConfig(p => ({ ...p, start: e.target.value }))}
-                placeholder="e.g. 1"
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="muted small">{t('endWorkerId')}</label>
-              <input
-                type="number"
-                className="input"
-                value={workerConfig.end}
-                onChange={e => setWorkerConfig(p => ({ ...p, end: e.target.value }))}
-                placeholder="e.g. 10"
-              />
-            </div>
-          </div>
-
-          {workerIds.length > 0 ? (
-            <>
-              <div className="row" style={{ justifyContent: "space-between", marginBottom: 10 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedWorkers.length === workerIds.length}
-                    onChange={e => setSelectedWorkers(e.target.checked ? [...workerIds] : [])}
-                  />
-                  <span className="small font-bold">{t('selectAll')} ({workerIds.length})</span>
-                </label>
-                <div className="row" style={{ gap: 8 }}>
-                  <button
-                    className="btn btnOk small"
-                    disabled={busy || selectedWorkers.length === 0}
-                    onClick={() => doWorkerAction("checkin")}
-                  >
-                    {t('checkin')}
-                  </button>
-                  <button
-                    className="btn btnDanger small"
-                    disabled={busy || selectedWorkers.length === 0}
-                    onClick={() => doWorkerAction("checkout")}
-                  >
-                    {t('checkout')}
-                  </button>
-                </div>
-              </div>
-
-              <div className="list" style={{ maxHeight: 200, overflowY: "auto", border: "1px solid #e2e8f0", padding: 10, borderRadius: 8 }}>
-                {workerIds.map(id => (
-                  <label key={id} className="item" style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", cursor: "pointer" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedWorkers.includes(id)}
-                        onChange={e => {
-                          if (e.target.checked) setSelectedWorkers(p => [...p, id]);
-                          else setSelectedWorkers(p => p.filter(x => x !== id));
-                        }}
-                      />
-                      <span>{t('workerLabel')} {id}</span>
-                    </div>
-                    <span className="pill small">
-                      <span className="dot" style={{ background: workerStatus[id] ? "var(--ok)" : "#cbd5e1" }} />
-                      <span style={{ fontSize: 11 }}>{workerStatus[id] ? t('statusWorking') : t('statusNotWorking')}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="muted small" style={{ textAlign: "center", padding: 20, background: "#f8fafc", borderRadius: 8 }}>
-              {t('noWorkersInRange')}
-            </div>
-          )}
 
           <div className="hr" />
 

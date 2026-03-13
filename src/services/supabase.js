@@ -55,6 +55,7 @@ export async function addUser(user) {
 
     const { data, error } = await supabase.from("users").insert([
       {
+        id: user.id, // Ensure ID is passed
         email: user.email,
         password: user.pass,
         name: user.name,
@@ -188,6 +189,119 @@ export async function updateUserPassword(email, newPassword) {
     return true;
   } catch (error) {
     console.error("❌ Error updating user password:", error);
+    throw error;
+  }
+}
+
+/**
+ * Update user role
+ */
+export async function updateUserRole(email, role) {
+  try {
+    if (!email || !role) {
+      console.error("❌ Missing params for updateRole:", { email, role });
+      throw new Error("Missing email or role for update");
+    }
+
+    console.log(`📤 Updating role for ${email} to ${role}...`);
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({ role })
+      .eq("email", email.toLowerCase())
+      .select();
+
+    if (error) {
+      console.error("❌ Supabase update error:", error);
+      throw error;
+    }
+
+    console.log("✅ Role updated in DB:", data);
+    return true;
+  } catch (error) {
+    if (error.message === "Failed to fetch" || error.message.includes("fetch")) {
+      console.warn("💡 Caught 'Failed to fetch'. This is likely a CORS, Adblocker, or Firewall issue blocking PATCH requests.");
+      console.log("🔄 Attempting to update role via backend proxy...");
+      
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+      const proxyRes = await fetch(`${backendUrl}/api/update-user-role`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, role })
+      });
+      
+      if (!proxyRes.ok) {
+        const errText = await proxyRes.text();
+        throw new Error(`Proxy update failed: ${errText}`);
+      }
+      return true;
+    }
+    console.error("❌ Error updating role:", error.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Assign employee to a team leader
+ */
+export async function assignEmployeeToLeader(employeeEmail, leaderEmail) {
+  try {
+    if (!employeeEmail) throw new Error("Missing employee email");
+
+    console.log(`📤 Assigning ${employeeEmail} to manager ${leaderEmail || "None"}...`);
+
+    const { data, error } = await supabase
+      .from("users")
+      .update({ managed_by: leaderEmail })
+      .eq("email", employeeEmail.toLowerCase())
+      .select();
+
+    if (error) {
+      console.error("❌ Supabase assignment error:", error);
+      throw error;
+    }
+
+    console.log("✅ Manager assigned in DB:", data);
+    return true;
+  } catch (error) {
+    if (error.message === "Failed to fetch" || error.message.includes("fetch")) {
+      console.warn("💡 Caught 'Failed to fetch'. This is likely a CORS, Adblocker, or Firewall issue blocking PATCH requests.");
+      console.log("🔄 Attempting to assign manager via backend proxy...");
+      
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
+      const proxyRes = await fetch(`${backendUrl}/api/assign-manager`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: employeeEmail, managerEmail: leaderEmail })
+      });
+      
+      if (!proxyRes.ok) {
+        const errText = await proxyRes.text();
+        throw new Error(`Proxy update failed: ${errText}`);
+      }
+      return true;
+    }
+    console.error("❌ Error assigning employee:", error.message || error);
+    throw error;
+  }
+}
+
+/**
+ * Get all employees managed by a team leader
+ */
+export async function getEmployeesByLeader(leaderEmail) {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("managed_by", leaderEmail.toLowerCase())
+      .eq("role", "employee")
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error("❌ Error fetching managed employees:", error);
     throw error;
   }
 }

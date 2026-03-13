@@ -1,5 +1,6 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import { formatBangkokTime, parseISO, getBangkokYMD, getBangkokTimeParts } from "./utils/date";
 
 import TopNav from "./ui/TopNav";
@@ -11,7 +12,7 @@ import EmployeeSignup from "./pages/employee/EmployeeSignup";
 import EmployeeDashboard from "./pages/employee/EmployeeDashboard";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import ForgotPassword from "./pages/ForgotPassword";
+import TeamLeaderDashboard from "./pages/team-leader/TeamLeaderDashboard";
 
 import { getSession } from "./services/storage";
 
@@ -27,17 +28,32 @@ function RequireAdmin({ children }) {
   return children;
 }
 
+function RequireTeamLeader({ children }) {
+  const s = getSession();
+  if (s.type !== "team_leader") return <Navigate to="/login" replace />;
+  return children;
+}
+
 export default function App() {
   const session = getSession(); // ✅ read session once for TopNav
 
   return (
     <LanguageProvider>
       <TopNav session={session} /> {/* ✅ pass session */}
+      <Toaster 
+        position="top-center" 
+        reverseOrder={false} 
+        toastOptions={{
+          duration: 5000,
+          style: {
+            transition: 'all 0.3s ease',
+          }
+        }}
+      />
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
 
         <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/employee/signup" element={<EmployeeSignup />} />
         <Route
           path="/employee/dashboard"
@@ -54,6 +70,15 @@ export default function App() {
             <RequireAdmin>
               <AdminDashboard />
             </RequireAdmin>
+          }
+        />
+
+        <Route
+          path="/team-leader/dashboard"
+          element={
+            <RequireTeamLeader>
+              <TeamLeaderDashboard />
+            </RequireTeamLeader>
           }
         />
 

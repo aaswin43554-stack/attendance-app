@@ -20,6 +20,8 @@ export default function Login() {
 
             if (user.role === "admin") {
                 nav("/admin/dashboard");
+            } else if (user.role === "team_leader") {
+                nav("/team-leader/dashboard");
             } else {
                 nav("/employee/dashboard");
             }
@@ -86,16 +88,6 @@ export default function Login() {
                                 disabled={loading}
                             >
                                 {t('createAccountBtn')}
-                            </button>
-                        </div>
-                        <div className="center mt10">
-                            <button
-                                className="btn btnText"
-                                type="button"
-                                onClick={() => nav("/forgot-password")}
-                                style={{ fontSize: '0.85rem' }}
-                            >
-                                {t('forgotPassword') || 'Forgot Password?'}
                             </button>
                         </div>
                     </form>
