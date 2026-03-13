@@ -42,11 +42,8 @@ export async function signupEmployee({ name, phone, email, pass }) {
 
     // 2. Add user to custom table
     const user = {
-<<<<<<< HEAD
-      id: crypto.randomUUID(), // Generate a valid UUID for Supabase primary keys
-=======
       id: authData.user?.id || crypto.randomUUID(),
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
+
       name: name.trim(),
       phone: phone.trim(),
       email: e,
@@ -192,49 +189,6 @@ export async function verifyLastPassword(email, lastPass) {
 }
 
 /**
- * Sends a custom OTP via our backend server
- */
-<<<<<<< HEAD
-export async function sendOTP(email) {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
-  const response = await fetch(`${backendUrl}/api/send-otp`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
-
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Failed to send OTP");
-  return true;
-}
-
-/**
- * Verifies the custom OTP via our backend
- */
-export async function verifyOTPCode(email, otp) {
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || "";
-  const response = await fetch(`${backendUrl}/api/verify-otp`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, otp }),
-  });
-
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Invalid OTP");
-  return true;
-}
-
-/**
- * Updates the password directly in the 'users' table
- */
-export async function updatePassword(email, newPass) {
-  try {
-    // We update the password directly in your custom users table
-    // (Bypassing Supabase Auth since we used our own OTP logic)
-    await updateUserPassword(email, newPass);
-    return true;
-=======
-/**
  * Generate and Send OTP (Bulletproof Production Version)
  */
 export async function sendOTP(email) {
@@ -258,15 +212,12 @@ export async function sendOTP(email) {
     }
 
     return data;
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
   } catch (error) {
     console.error("❌ sendOTP Error:", error);
     throw new Error(`OTP Error: ${error.message}`);
   }
 }
 
-<<<<<<< HEAD
-=======
 /**
  * Verifies the hashed OTP (Bulletproof Production Version)
  */
@@ -317,7 +268,6 @@ export async function updatePassword(email, newPass) {
   }
 }
 
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 export async function loginEmployee({ email, pass }) {
   const e = email.trim().toLowerCase();
 

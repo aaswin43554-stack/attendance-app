@@ -3,13 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Card from "../../ui/Card";
 import Toast from "../../ui/Toast";
 import { getSession } from "../../services/storage";
-<<<<<<< HEAD
 import { createAttendance, createTeamLeaderBulkAttendance } from "../../services/attendance";
 import { supabase, getEmployeesByLeader, getAllAttendanceRecords } from "../../services/supabase";
-=======
-import { getEmployeesByLeader, getAllAttendanceRecords } from "../../services/supabase";
-import { createTeamLeaderBulkAttendance } from "../../services/attendance";
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 import { logout } from "../../services/auth";
 import { useLanguage } from "../../context/LanguageContext";
 import { formatBangkokTime, getBangkokYMD, parseISO } from "../../utils/date";
@@ -23,7 +18,7 @@ export default function TeamLeaderDashboard() {
     const [selectedIds, setSelectedIds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busy, setBusy] = useState(false);
-<<<<<<< HEAD
+    const [toast, setToast] = useState("");
     const [allRecords, setAllRecords] = useState([]);
     const [now, setNow] = useState(new Date());
 
@@ -109,32 +104,6 @@ export default function TeamLeaderDashboard() {
             setTimeout(() => setToast(""), 3000);
         }
     };
-
-=======
-    const [toast, setToast] = useState("");
-    const [allRecords, setAllRecords] = useState([]);
-
-    useEffect(() => {
-        async function fetchData() {
-            if (!session.userId) return;
-            try {
-                const [managed, records] = await Promise.all([
-                    getEmployeesByLeader(session.userId),
-                    getAllAttendanceRecords()
-                ]);
-                setEmployees(managed);
-                setAllRecords(records);
-            } catch (error) {
-                console.error("Failed to fetch data:", error);
-                setToast("Error fetching team data");
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchData();
-    }, [session.userId]);
-
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
     const getLatestStatus = (userName) => {
         const userRecords = allRecords
             .filter((r) => r.userName === userName)
@@ -200,7 +169,6 @@ export default function TeamLeaderDashboard() {
             <section className="single">
                 <Card
                     title={`${t('hello')}, ${session.userName || "Team Leader"}`}
-<<<<<<< HEAD
                     subtitle="Team Leader Dashboard"
                     right={
                         <div style={{ textAlign: "right" }}>
@@ -248,16 +216,6 @@ export default function TeamLeaderDashboard() {
                     </div>
 
                     <div className="hr" />
-
-=======
-                    subtitle="Team Leader Dashboard • Shared Device Mode"
-                    right={
-                        <div className="row">
-                            <button onClick={onLogout} className="btn-icon">{t('logout')}</button>
-                        </div>
-                    }
-                >
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
                     <div className="item" style={{ background: "#f8fafc", marginBottom: 20 }}>
                         <h3 className="title" style={{ fontSize: 16 }}>Team Management</h3>
                         <p className="muted small">Capture one location and timestamp for multiple employees at once.</p>

@@ -9,7 +9,6 @@ import bcrypt from "bcryptjs";
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
 
-<<<<<<< HEAD
 // Load .env only in local development
 if (process.env.NODE_ENV !== "production") {
   const dotenv = await import("dotenv");
@@ -17,7 +16,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 console.log("📍 Server Port:", PORT);
 console.log("📧 Email User Configured:", process.env.EMAIL_USER ? "Yes" : "No");
@@ -27,12 +26,6 @@ console.log("📧 Email User Configured:", process.env.EMAIL_USER ? "Yes" : "No"
 const GOOGLE_SHEETS_API_URL =
   process.env.GOOGLE_SHEETS_API_URL || process.env.VITE_GOOGLE_SHEETS_API_URL;
 
-// __dirname for ES Modules
-=======
-// 1. Initialize Express & Constants
-const app = express();
-const PORT = process.env.PORT || 10000;
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -487,10 +480,6 @@ app.post("/api/assign-manager", async (req, res) => {
 });
 
 // ✅ Serve Vite build output (dist)
-=======
- * 6. STATIC ASSETS & SPA ROUTING
- */
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));
 
@@ -511,39 +500,10 @@ app.use((req, res, next) => {
   });
 });
 
-<<<<<<< HEAD
 // Start server
 const server = app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 Server is listening at http://localhost:${PORT}`);
-  console.log(`📧 Email User: ${process.env.EMAIL_USER ? process.env.EMAIL_USER : "Not Configured"}`);
-  console.log(`📊 Google Sheets API: ${GOOGLE_SHEETS_API_URL ? "Connected" : "Not Configured"}`);
-});
-
-server.on("error", (err) => {
-  if (err.code === "EADDRINUSE") {
-    console.error(`❌ Port ${PORT} is busy. Please kill the process on this port or change it in server.js`);
-  } else {
-    console.error("❌ Server Error:", err);
-  }
-  process.exit(1);
-});
-
-// Prevent process from exiting (Health check)
-setInterval(() => {
-  // console.log("💓 Server heartbeat...");
-}, 300000);
-
-// Global Error Handling
-process.on("uncaughtException", (err) => {
-  console.error("💥 Uncaught Exception:", err);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("💥 Unhandled Rejection at:", promise, "reason:", reason);
-=======
-// 7. START SERVER
-app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Bulletproof Server listening on port ${PORT}`);
   console.log(`🚀 Service ready at http://0.0.0.0:${PORT}`);
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
+  console.log(`📧 Email User: ${process.env.EMAIL_USER ? process.env.EMAIL_USER : "Not Configured"}`);
+  console.log(`📊 Google Sheets API: ${GOOGLE_SHEETS_API_URL ? "Connected" : "Not Configured"}`);
 });

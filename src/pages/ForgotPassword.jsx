@@ -2,10 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../ui/Card";
 import Toast from "../ui/Toast";
-<<<<<<< HEAD
 import { resetPassword, verifyLastPassword, updatePassword, sendOTP, verifyOTPCode } from "../services/auth";
-=======
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
 import { useLanguage } from "../context/LanguageContext";
 import { requestCustomOTPReset } from "../services/auth";
 
@@ -50,7 +47,6 @@ export default function ForgotPassword() {
         }
     };
 
-<<<<<<< HEAD
     const handleChoice = async (type) => {
         if (type === 'otp') {
             try {
@@ -233,9 +229,6 @@ export default function ForgotPassword() {
                 return null;
         }
     };
-
-=======
->>>>>>> e686269b2721cd109499271ae76dc0e37d67115f
     return (
         <main className="page">
             <section className="single" style={{ maxWidth: 400, margin: '0 auto' }}>
