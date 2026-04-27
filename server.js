@@ -479,6 +479,47 @@ app.post("/api/assign-manager", async (req, res) => {
   }
 });
 
+// ── Payroll proxy routes ──────────────────────────────────────────────────────
+// Used as fallback when direct Supabase calls are blocked by adblockers/firewalls.
+
+app.post("/api/payroll/save-rates", async (req, res) => {
+  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not initialized" });
+  const { records } = req.body;
+  if (!Array.isArray(records) || records.length === 0) {
+    return res.status(400).json({ ok: false, error: "records must be a non-empty array" });
+  }
+  try {
+    const { error } = await supabaseAdmin
+      .from("payroll_rates")
+      .upsert(records, { onConflict: "employee_key" });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[PAYROLL] save-rates error:", err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/payroll/save-config", async (req, res) => {
+  if (!supabaseAdmin) return res.status(500).json({ ok: false, error: "Database not initialized" });
+  const { lateLogin, earlyLogout } = req.body;
+  try {
+    const { error } = await supabaseAdmin
+      .from("payroll_config")
+      .upsert({
+        id: 1,
+        late_login_deduction: parseFloat(lateLogin) || 0,
+        early_logout_deduction: parseFloat(earlyLogout) || 0,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "id" });
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[PAYROLL] save-config error:", err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ✅ Serve Vite build output (dist)
 const distPath = path.join(__dirname, "dist");
 app.use(express.static(distPath));

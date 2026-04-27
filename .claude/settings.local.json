@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "mcp__plugin_supabase_supabase__list_projects",
+      "mcp__plugin_supabase_supabase__execute_sql",
+      "Bash(npm install *)",
+      "Bash(npm list *)"
+    ]
+  }
+}
