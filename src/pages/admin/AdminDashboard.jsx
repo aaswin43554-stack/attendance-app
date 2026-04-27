@@ -10,6 +10,7 @@ import LocationMap from "../../ui/LocationMap";
 import { formatBangkokTime, parseISO, getBangkokYMD, getBangkokTimeParts } from "../../utils/date";
 
 import AttendanceCalendar from "../../ui/AttendanceCalendar";
+import PayrollPanel from "../../ui/PayrollPanel";
 
 export default function AdminDashboard() {
   const nav = useNavigate();
@@ -549,6 +550,11 @@ export default function AdminDashboard() {
           </div>
 
           <AttendanceCalendar employees={employees} allRecords={allRecords} />
+          <PayrollPanel
+            employees={employees}
+            allRecords={allRecords}
+            workSettings={workSettings}
+          />
         </Card>
       </section>
     </main>
