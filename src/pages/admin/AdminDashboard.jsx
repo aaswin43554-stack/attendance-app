@@ -11,6 +11,8 @@ import { formatBangkokTime, parseISO, getBangkokYMD, getBangkokTimeParts } from 
 
 import AttendanceCalendar from "../../ui/AttendanceCalendar";
 import PayrollPanel from "../../ui/PayrollPanel";
+import Sidebar from "../../ui/Sidebar";
+import * as XLSX from "xlsx";
 
 export default function AdminDashboard() {
   const nav = useNavigate();
@@ -42,6 +44,7 @@ export default function AdminDashboard() {
   const [tempStart, setTempStart] = useState("");
   const [tempEnd, setTempEnd] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   // Sync temp inputs when selection changes
   useEffect(() => {
@@ -237,7 +240,7 @@ export default function AdminDashboard() {
 
 
 
-  const downloadCSV = () => {
+  const downloadExcel = () => {
     const headers = ["Name", "Email", "Phone", "Date", "Time", "Type", "Address", "Platform", "Checked By", "Shared Device"];
     // Create maps for quick lookup (case-insensitive keys)
     const emailMap = {};
@@ -268,295 +271,322 @@ export default function AdminDashboard() {
         getBangkokYMD(parseISO(r.time)),
         timeStr,
         r.type,
-        `"${(r.address || "").replace(/"/g, '""')}"`,
+        r.address || "",
         r.device?.platform || "",
         checkedBy,
         isShared
       ];
     });
 
-    const csvContent = [
-      headers.join(","),
-      ...rows.map(row => row.join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `attendance_export_${getBangkokYMD(new Date())}.csv`);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const aoa = [
+      headers,
+      ...rows
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+    XLSX.writeFile(wb, `attendance_export_${getBangkokYMD(new Date())}.xlsx`);
   };
 
+  const navItems = [
+    { id: "overview", label: t('adminDashboard') || "Overview", icon: "📊" },
+    { id: "calendar", label: t('attendanceCalendar') || "Calendar", icon: "📅" },
+    { id: "payroll", label: t('payroll') || "Payroll", icon: "💰" }
+  ];
+
   return (
-    <main className="page">
-      <section className="single">
-        <Card
-          title={t('adminDashboard')}
-          subtitle={t('adminSubtitle')}
-          right={
-            <div className="row">
-              <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} {t('working')}</span>
-              <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} {t('total')}</span>
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="btn-icon"
-                style={{ marginLeft: 12, background: showSettings ? "var(--bg)" : "white" }}
-              >
-                ⚙️ {t('settings')}
-              </button>
-              <button onClick={downloadCSV} className="btn-icon" style={{ marginLeft: 8, background: "var(--primary)", color: "white" }}>{t('exportCSV')}</button>
-              <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 8 }}>{t('logout')}</button>
-            </div>
-          }
-        >
-          {showSettings && (
-            <div className="item" style={{ marginBottom: 20, borderTop: "2px solid var(--primary)" }}>
-              <h3 className="title">{t('settings')}</h3>
-
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>{t('selectEmployeeLabel')}</label>
-                <select
-                  className="input"
-                  value={settingsTarget}
-                  onChange={(e) => setSettingsTarget(e.target.value)}
-                  style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ddd" }}
-                >
-                  <option value="default">{t('defaultSettings')}</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.name}>{emp.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid2" style={{ gap: 20 }}>
-                <div>
-                  <label>{t('workStartTime')}</label>
-                  <input
-                    type="time"
-                    value={tempStart}
-                    onChange={e => setTempStart(e.target.value)}
-                  />
+    <div className="dashboard-layout">
+      <Sidebar 
+        title="Admin Panel"
+        items={navItems} 
+        activeItem={activeTab} 
+        onChange={setActiveTab} 
+      />
+      <main className="dashboard-content">
+        {activeTab === "overview" && (
+          <section className="single" style={{ animation: "fadeIn 0.3s ease" }}>
+            <Card
+              title={t('adminDashboard')}
+              subtitle={t('adminSubtitle')}
+              right={
+                <div className="row">
+                  <span className="pill"><span className="dot" style={{ background: "var(--ok)" }} /> {workingCount} {t('working')}</span>
+                  <span className="pill"><span className="dot" style={{ background: "#cbd5e1" }} /> {employees.length} {t('total')}</span>
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="btn-icon"
+                    style={{ marginLeft: 12, background: showSettings ? "var(--bg)" : "white" }}
+                  >
+                    ⚙️ {t('settings')}
+                  </button>
+                  <button onClick={downloadExcel} className="btn-icon" style={{ marginLeft: 8, background: "var(--primary)", color: "white" }}>Export Excel</button>
+                  <button onClick={onLogout} className="btn-icon" style={{ marginLeft: 8 }}>{t('logout')}</button>
                 </div>
-                <div>
-                  <label>{t('workEndTime')}</label>
-                  <input
-                    type="time"
-                    value={tempEnd}
-                    onChange={e => setTempEnd(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="row mt12">
-                <button className="btn btnPrimary" onClick={saveWorkSettings}>{t('saveSettings')}</button>
-              </div>
-            </div>
-          )}
+              }
+            >
+              {showSettings && (
+                <div className="item" style={{ marginBottom: 20, borderTop: "2px solid var(--primary)" }}>
+                  <h3 className="title">{t('settings')}</h3>
 
-          <div className="adminGrid">
-            <div>
-              <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('employees')}</h3>
-
-              <div className="list">
-                {loading ? (
-                  <div className="muted small">{t('loadingEmployees')}</div>
-                ) : employees.length === 0 ? (
-                  <div className="muted small">{t('noEmployees')}</div>
-                ) : employees.map((u) => {
-                  const st = getLatestStatus(u);
-                  const latestTime = st.latest ? formatBangkokTime(st.latest.time) : "—";
-                  const dotColor = st.status === t('statusWorking') ? "var(--ok)" : "#cbd5e1";
-
-                  return (
-                    <div
-                      key={u.id}
-                      className={"item " + (selectedId === u.id ? "selected" : "")}
-                      onClick={() => toggleSelect(u.id)}
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", marginBottom: 6, fontWeight: 700 }}>{t('selectEmployeeLabel')}</label>
+                    <select
+                      className="input"
+                      value={settingsTarget}
+                      onChange={(e) => setSettingsTarget(e.target.value)}
+                      style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #ddd" }}
                     >
-                      <div className="row" style={{ justifyContent: "space-between" }}>
-                        <div>
-                          <div style={{ fontWeight: 900 }}>
-                            {u.name} <span className="muted2" style={{ fontWeight: 700 }}>({u.email})</span>
-                          </div>
-                          <div className="muted small">{t('last')}: {latestTime}</div>
-                          <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
-                            <span className="pill" style={{ background: u.role === 'team_leader' ? "#dcfce7" : "#f1f5f9", color: u.role === 'team_leader' ? "#166534" : "#475569", fontSize: "10px", padding: "2px 6px" }}>
-                              {u.role === 'team_leader' ? 'Team Leader' : 'Employee'}
-                            </span>
-                            {calculateTodayStats(u.name).isLateLogin && (
-                              <span className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "10px", padding: "2px 6px" }}>{t('lateLogin')}</span>
-                            )}
-                            {calculateTodayStats(u.name).isEarlyLogout && (
-                              <span className="pill" style={{ background: "#fef3c7", color: "#92400e", fontSize: "10px", padding: "2px 6px" }}>{t('earlyLogout')}</span>
-                            )}
-                          </div>
-                        </div>
-                        <span className="pill">
-                          <span className="dot" style={{ background: dotColor }} />
-                          <span>{st.status}</span>
-                        </span>
-                      </div>
+                      <option value="default">{t('defaultSettings')}</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.name}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid2" style={{ gap: 20 }}>
+                    <div>
+                      <label>{t('workStartTime')}</label>
+                      <input
+                        type="time"
+                        value={tempStart}
+                        onChange={e => setTempStart(e.target.value)}
+                      />
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                    <div>
+                      <label>{t('workEndTime')}</label>
+                      <input
+                        type="time"
+                        value={tempEnd}
+                        onChange={e => setTempEnd(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="row mt12">
+                    <button className="btn btnPrimary" onClick={saveWorkSettings}>{t('saveSettings')}</button>
+                  </div>
+                </div>
+              )}
 
-            <div>
-              <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('details')}</h3>
-
-              {!selected ? (
-                <div className="muted small">{t('selectEmployee')}</div>
-              ) : (
-                <>
-                  {(() => {
-                    const st = getLatestStatus(selected);
-                    const latest = st.latest;
-                    const stats = calculateTodayStats(selected.name);
-
-                    return (
-                      <div className="item" style={{ cursor: "default", borderLeft: stats.isActive ? "4px solid var(--ok)" : "none" }}>
-                        <div style={{ fontWeight: 950, fontSize: 16 }}>{selected.name}</div>
-                        <div className="muted small">
-                          {selected.email}{selected.phone ? " • " + selected.phone : ""}
-                        </div>
-
-                        {!selected.isVirtual && (
-                          <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
-                            <div style={{ flex: 1, minWidth: 150 }}>
-                              <label className="muted small" style={{ fontWeight: 700 }}>Role</label>
-                              <select
-                                className="input"
-                                value={selected.role}
-                                onChange={(e) => updateRole(selected.email, e.target.value)}
-                                style={{ width: "100%", padding: "4px 8px", fontSize: "13px" }}
-                              >
-                                <option value="employee">Employee</option>
-                                <option value="team_leader">Team Leader</option>
-                                <option value="admin">Admin</option>
-                              </select>
-                            </div>
-                            {selected.role === "employee" && (
-                              <div style={{ flex: 1, minWidth: 150 }}>
-                                <label className="muted small" style={{ fontWeight: 700 }}>Manager (Team Leader)</label>
-                                <select
-                                  className="input"
-                                  value={selected.managed_by || ""}
-                                  onChange={(e) => updateManager(selected.email, e.target.value)}
-                                  style={{ width: "100%", padding: "4px 8px", fontSize: "13px" }}
-                                >
-                                  <option value="">No Manager</option>
-                                  {employees
-                                    .filter(u => u.role === "team_leader")
-                                    .map(tl => (
-                                      <option key={tl.id} value={tl.email}>{tl.name}</option>
-                                    ))
-                                  }
-                                </select>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        <div className="hr" />
-
-                        <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
-                          <div>
-                            <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>{t('todayWorkingHours')}</div>
-                            <div style={{ fontSize: "1.2rem", fontWeight: 900, color: stats.isActive ? "var(--ok)" : "var(--text)" }}>
-                              {stats.totalTime}
-                            </div>
-                            {stats.isActive && <div className="muted2 small">{t('activeSession')}</div>}
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
-                              {stats.isLateLogin && (
-                                <div className="column" style={{ gap: 4 }}>
-                                  <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
-                                    {t('lateLoginWarning').replace('{time}', stats.limitStart)}
-                                  </div>
-                                </div>
-                              )}
-                              {stats.isEarlyLogout && (
-                                <div className="column" style={{ gap: 4 }}>
-                                  <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
-                                    {t('earlyLogoutWarning').replace('{time}', stats.limitEnd)}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div style={{ textAlign: "right" }}>
-                            <span className="pill" style={{ marginBottom: 4, display: "inline-flex" }}>
-                              <span className="dot" style={{ background: st.status === t('statusWorking') ? "var(--ok)" : "#cbd5e1" }} />
-                              <span>{st.status}</span>
-                            </span>
-                            <div className="muted small">{t('last')}: {latest ? formatBangkokTime(latest.time) : "—"}</div>
-                          </div>
-                        </div>
-
-                        {latest ? (
-                          <>
-                            <div className="hr" />
-                            <div className="muted small"><b>{t('latest')} {latest.type === "checkin" ? t('checkin') : t('checkout')}</b></div>
-                            <LocationMap
-                              lat={latest.lat}
-                              lng={latest.lng}
-                              address={latest.address}
-                              height="200px"
-                            />
-                            <div className="muted small" style={{ marginTop: 8 }}>{latest.address || t('addressUnavailable')}</div>
-                            <div className="muted2 small" style={{ marginTop: 6 }}>
-                              <b>{t('device')}:</b> {latest.device?.platform || ""}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="muted small">{t('noLogs')}</div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  <div className="hr" />
+              <div className="adminGrid">
+                <div>
+                  <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('employees')}</h3>
 
                   <div className="list">
-                    {selectedLogs.slice(0, 25).map((r) => (
-                      <div key={r.id} className="item" style={{ cursor: "default" }}>
-                        <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div>
-                            <div style={{ fontWeight: 900 }}>
-                              {r.type === "checkin" ? t('checkin') : t('checkout')}{" "}
-                              <span className="muted2" style={{ fontWeight: 700 }}>• {formatBangkokTime(r.time)}</span>
-                            </div>
-                            <div className="muted mono">lat:{Number(r.lat).toFixed(6)} lng:{Number(r.lng).toFixed(6)}</div>
-                            <div className="muted small">{r.address || t('addressUnavailable')}</div>
-                          </div>
-                          <div className="muted2 small" style={{ textAlign: "right" }}>
-                            <div className="mono">{r.device?.platform || ""}</div>
-                            {(r.checked_in_by || r.device?.checkedInBy) && (
-                              <div style={{ color: "var(--primary)", fontWeight: 700, marginTop: 4 }}>
-                                via {r.checked_in_by || r.device?.checkedInBy}
+                    {loading ? (
+                      <div className="muted small">{t('loadingEmployees')}</div>
+                    ) : employees.length === 0 ? (
+                      <div className="muted small">{t('noEmployees')}</div>
+                    ) : employees.map((u) => {
+                      const st = getLatestStatus(u);
+                      const latestTime = st.latest ? formatBangkokTime(st.latest.time) : "—";
+                      const dotColor = st.status === t('statusWorking') ? "var(--ok)" : "#cbd5e1";
+
+                      return (
+                        <div
+                          key={u.id}
+                          className={"item " + (selectedId === u.id ? "selected" : "")}
+                          onClick={() => toggleSelect(u.id)}
+                        >
+                          <div className="row" style={{ justifyContent: "space-between" }}>
+                            <div>
+                              <div style={{ fontWeight: 900 }}>
+                                {u.name} <span className="muted2" style={{ fontWeight: 700 }}>({u.email})</span>
                               </div>
-                            )}
+                              <div className="muted small">{t('last')}: {latestTime}</div>
+                              <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                                <span className="pill" style={{ background: u.role === 'team_leader' ? "#dcfce7" : "#f1f5f9", color: u.role === 'team_leader' ? "#166534" : "#475569", fontSize: "10px", padding: "2px 6px" }}>
+                                  {u.role === 'team_leader' ? 'Team Leader' : 'Employee'}
+                                </span>
+                                {calculateTodayStats(u.name).isLateLogin && (
+                                  <span className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "10px", padding: "2px 6px" }}>{t('lateLogin')}</span>
+                                )}
+                                {calculateTodayStats(u.name).isEarlyLogout && (
+                                  <span className="pill" style={{ background: "#fef3c7", color: "#92400e", fontSize: "10px", padding: "2px 6px" }}>{t('earlyLogout')}</span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="pill">
+                              <span className="dot" style={{ background: dotColor }} />
+                              <span>{st.status}</span>
+                            </span>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                </>
-              )}
-            </div>
-          </div>
+                </div>
 
-          <AttendanceCalendar employees={employees} allRecords={allRecords} />
-          <PayrollPanel
-            employees={employees}
-            allRecords={allRecords}
-            workSettings={workSettings}
-          />
-        </Card>
-      </section>
-    </main>
+                <div>
+                  <h3 className="title" style={{ fontSize: 15, margin: "0 0 10px 0" }}>{t('details')}</h3>
+
+                  {!selected ? (
+                    <div className="muted small">{t('selectEmployee')}</div>
+                  ) : (
+                    <>
+                      {(() => {
+                        const st = getLatestStatus(selected);
+                        const latest = st.latest;
+                        const stats = calculateTodayStats(selected.name);
+
+                        return (
+                          <div className="item" style={{ cursor: "default", borderLeft: stats.isActive ? "4px solid var(--ok)" : "none" }}>
+                            <div style={{ fontWeight: 950, fontSize: 16 }}>{selected.name}</div>
+                            <div className="muted small">
+                              {selected.email}{selected.phone ? " • " + selected.phone : ""}
+                            </div>
+
+                            {!selected.isVirtual && (
+                              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 10 }}>
+                                <div style={{ flex: 1, minWidth: 150 }}>
+                                  <label className="muted small" style={{ fontWeight: 700 }}>Role</label>
+                                  <select
+                                    className="input"
+                                    value={selected.role}
+                                    onChange={(e) => updateRole(selected.email, e.target.value)}
+                                    style={{ width: "100%", padding: "4px 8px", fontSize: "13px" }}
+                                  >
+                                    <option value="employee">Employee</option>
+                                    <option value="team_leader">Team Leader</option>
+                                    <option value="admin">Admin</option>
+                                  </select>
+                                </div>
+                                {selected.role === "employee" && (
+                                  <div style={{ flex: 1, minWidth: 150 }}>
+                                    <label className="muted small" style={{ fontWeight: 700 }}>Manager (Team Leader)</label>
+                                    <select
+                                      className="input"
+                                      value={selected.managed_by || ""}
+                                      onChange={(e) => updateManager(selected.email, e.target.value)}
+                                      style={{ width: "100%", padding: "4px 8px", fontSize: "13px" }}
+                                    >
+                                      <option value="">No Manager</option>
+                                      {employees
+                                        .filter(u => u.role === "team_leader")
+                                        .map(tl => (
+                                          <option key={tl.id} value={tl.email}>{tl.name}</option>
+                                        ))
+                                      }
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="hr" />
+
+                            <div className="row" style={{ justifyContent: "space-between", marginBottom: 16 }}>
+                              <div>
+                                <div className="muted small" style={{ fontWeight: 700, marginBottom: 4 }}>{t('todayWorkingHours')}</div>
+                                <div style={{ fontSize: "1.2rem", fontWeight: 900, color: stats.isActive ? "var(--ok)" : "var(--text)" }}>
+                                  {stats.totalTime}
+                                </div>
+                                {stats.isActive && <div className="muted2 small">{t('activeSession')}</div>}
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "8px" }}>
+                                  {stats.isLateLogin && (
+                                    <div className="column" style={{ gap: 4 }}>
+                                      <div className="pill" style={{ background: "#fee2e2", color: "#991b1b", fontWeight: "bold" }}>
+                                        {t('lateLoginWarning').replace('{time}', stats.limitStart)}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {stats.isEarlyLogout && (
+                                    <div className="column" style={{ gap: 4 }}>
+                                      <div className="pill" style={{ background: "#fef3c7", color: "#92400e", fontWeight: "bold" }}>
+                                        {t('earlyLogoutWarning').replace('{time}', stats.limitEnd)}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <span className="pill" style={{ marginBottom: 4, display: "inline-flex" }}>
+                                  <span className="dot" style={{ background: st.status === t('statusWorking') ? "var(--ok)" : "#cbd5e1" }} />
+                                  <span>{st.status}</span>
+                                </span>
+                                <div className="muted small">{t('last')}: {latest ? formatBangkokTime(latest.time) : "—"}</div>
+                              </div>
+                            </div>
+
+                            {latest ? (
+                              <>
+                                <div className="hr" />
+                                <div className="muted small"><b>{t('latest')} {latest.type === "checkin" ? t('checkin') : t('checkout')}</b></div>
+                                <LocationMap
+                                  lat={latest.lat}
+                                  lng={latest.lng}
+                                  address={latest.address}
+                                  height="200px"
+                                />
+                                <div className="muted small" style={{ marginTop: 8 }}>{latest.address || t('addressUnavailable')}</div>
+                                <div className="muted2 small" style={{ marginTop: 6 }}>
+                                  <b>{t('device')}:</b> {latest.device?.platform || ""}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="muted small">{t('noLogs')}</div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      <div className="hr" />
+
+                      <div className="list">
+                        {selectedLogs.slice(0, 25).map((r) => (
+                          <div key={r.id} className="item" style={{ cursor: "default" }}>
+                            <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div>
+                                <div style={{ fontWeight: 900 }}>
+                                  {r.type === "checkin" ? t('checkin') : t('checkout')}{" "}
+                                  <span className="muted2" style={{ fontWeight: 700 }}>• {formatBangkokTime(r.time)}</span>
+                                </div>
+                                <div className="muted mono">lat:{Number(r.lat).toFixed(6)} lng:{Number(r.lng).toFixed(6)}</div>
+                                <div className="muted small">{r.address || t('addressUnavailable')}</div>
+                              </div>
+                              <div className="muted2 small" style={{ textAlign: "right" }}>
+                                <div className="mono">{r.device?.platform || ""}</div>
+                                {(r.checked_in_by || r.device?.checkedInBy) && (
+                                  <div style={{ color: "var(--primary)", fontWeight: 700, marginTop: 4 }}>
+                                    via {r.checked_in_by || r.device?.checkedInBy}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </section>
+        )}
+
+        {activeTab === "calendar" && (
+          <section className="single" style={{ animation: "fadeIn 0.3s ease" }}>
+            <AttendanceCalendar employees={employees} allRecords={allRecords} />
+          </section>
+        )}
+
+        {activeTab === "payroll" && (
+          <section className="single" style={{ animation: "fadeIn 0.3s ease" }}>
+            <PayrollPanel
+              employees={employees}
+              allRecords={allRecords}
+              workSettings={workSettings}
+            />
+          </section>
+        )}
+      </main>
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
   );
 }

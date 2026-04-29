@@ -49,15 +49,20 @@ if (missing.length > 0) {
 }
 
 // 4. Supabase Admin Initialisation
-const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const isServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
-  auth: { autoRefreshToken: false, persistSession: false }
-});
+let supabaseAdmin = null;
+if (supabaseUrl && supabaseKey) {
+  supabaseAdmin = createClient(supabaseUrl, supabaseKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+} else {
+  console.warn("⚠️ [SYS] Supabase Admin not initialized because SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.");
+}
 
-console.log(`[SYS] Supabase URL: ${supabaseUrl}`);
+console.log(`[SYS] Supabase URL: ${supabaseUrl || "Not Set"}`);
 console.log(`[SYS] Supabase Service Role Active: ${isServiceRole}`);
 console.log("="?.repeat(50));
 

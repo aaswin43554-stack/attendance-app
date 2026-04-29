@@ -388,7 +388,6 @@ export default function PayrollPanel({ employees, allRecords, workSettings }) {
       <div className="pr-header">
         <div className="pr-title-group">
           <h3 className="pr-title">Payroll</h3>
-          <p className="pr-subtitle">Monthly salary calculation — data stored in Supabase</p>
         </div>
         <div className="pr-controls">
           <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="btn-nav">←</button>
